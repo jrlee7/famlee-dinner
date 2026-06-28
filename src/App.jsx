@@ -2231,7 +2231,14 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
                 const val = e.target.value;
                 set("image", val);
                 if (val.startsWith("http") && !r.sourceUrl) set("sourceUrl", val);
-                if (val.startsWith("http")) setFoundPhotos(prev => prev.includes(val) ? prev : [val, ...prev]);
+                if (val.startsWith("http")) {
+                  setFoundPhotos(prev => prev.includes(val) ? prev : [val, ...prev]);
+                  // Proxy-fetch to bypass hotlink protection
+                  fetch(`${FN}/imageProxy?url=${encodeURIComponent(val)}`)
+                    .then(r => r.json())
+                    .then(d => { if (d.dataUrl) { set("image", d.dataUrl); setFoundPhotos(prev => [d.dataUrl, ...prev.filter(p=>p!==val)]); } })
+                    .catch(()=>{});
+                }
               }} placeholder="Paste image URL or upload…" style={{ flex:1, background:C.surface, border:`1px solid ${C.border}`, borderRadius:7, padding:"5px 8px", color:C.text, fontSize:11, minWidth:0 }}/>
               <Btn variant="ghost" onClick={()=>fileRef.current.click()} style={{ padding:"5px 8px", fontSize:11, flexShrink:0 }}>📁</Btn>
               <Btn variant="ghost" onClick={findPhotos} disabled={photoSearching} style={{ padding:"5px 8px", fontSize:11, flexShrink:0, whiteSpace:"nowrap" }}>{photoSearching?<Spin size={11}/>:"🔍 Find"}</Btn>

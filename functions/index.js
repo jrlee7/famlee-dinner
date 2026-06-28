@@ -408,6 +408,47 @@ exports.scrapeRecipe = onRequest(
   }
 );
 
+exports.imageProxy = onRequest(
+  { cors: true, timeoutSeconds: 30, region: "us-central1" },
+  function(req, res) {
+    setCors(res);
+    if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    var url = (req.query.url || (req.body && req.body.url) || "").trim();
+    if (!url || !url.startsWith("http")) { res.status(400).json({ error: "Missing url" }); return; }
+    var parsed;
+    try { parsed = new URL(url); } catch(e) { res.status(400).json({ error: "Invalid url" }); return; }
+    var lib = parsed.protocol === "https:" ? https : http;
+    var options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+      path: parsed.pathname + (parsed.search || ""),
+      method: "GET",
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "image/*,*/*" }
+    };
+    var proxyReq = lib.request(options, function(proxyRes) {
+      if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+        res.status(400).json({ error: "Redirect not followed: " + proxyRes.headers.location }); return;
+      }
+      if (proxyRes.statusCode !== 200) { res.status(502).json({ error: "Upstream " + proxyRes.statusCode }); return; }
+      var contentType = proxyRes.headers["content-type"] || "image/jpeg";
+      var chunks = [];
+      var stream = proxyRes;
+      var enc = (proxyRes.headers["content-encoding"] || "").toLowerCase();
+      if (enc === "gzip") stream = proxyRes.pipe(zlib.createGunzip());
+      else if (enc === "deflate") stream = proxyRes.pipe(zlib.createInflate());
+      stream.on("data", function(c) { chunks.push(c); });
+      stream.on("end", function() {
+        var buf = Buffer.concat(chunks);
+        var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
+        res.json({ dataUrl: b64 });
+      });
+      stream.on("error", function(e) { res.status(500).json({ error: e.message }); });
+    });
+    proxyReq.on("error", function(e) { res.status(500).json({ error: e.message }); });
+    proxyReq.end();
+  }
+);
+
 exports.claudeProxy = onRequest(
   { cors: true, timeoutSeconds: 120, region: "us-central1" },
   function(req, res) {
