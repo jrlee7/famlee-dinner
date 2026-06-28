@@ -2228,15 +2228,16 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
             <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:4 }}>📷 Photo</div>
             <div style={{ display:"flex", gap:5 }}>
               <input value={r.image?.startsWith("data:")?"":r.image||""} onChange={e=>{
-                set("image",e.target.value);
-                // If URL is pasted and no sourceUrl yet, offer to save as source
-                if (e.target.value.startsWith("http") && !r.sourceUrl) set("sourceUrl", e.target.value);
+                const val = e.target.value;
+                set("image", val);
+                if (val.startsWith("http") && !r.sourceUrl) set("sourceUrl", val);
+                if (val.startsWith("http")) setFoundPhotos(prev => prev.includes(val) ? prev : [val, ...prev]);
               }} placeholder="Paste image URL or upload…" style={{ flex:1, background:C.surface, border:`1px solid ${C.border}`, borderRadius:7, padding:"5px 8px", color:C.text, fontSize:11, minWidth:0 }}/>
               <Btn variant="ghost" onClick={()=>fileRef.current.click()} style={{ padding:"5px 8px", fontSize:11, flexShrink:0 }}>📁</Btn>
               <Btn variant="ghost" onClick={findPhotos} disabled={photoSearching} style={{ padding:"5px 8px", fontSize:11, flexShrink:0, whiteSpace:"nowrap" }}>{photoSearching?<Spin size={11}/>:"🔍 Find"}</Btn>
               <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleImg}/>
             </div>
-            {r.image && <div style={{ display:"flex", gap:6, marginTop:5 }}><img src={r.image} alt="" style={{ width:48, height:36, objectFit:"cover", borderRadius:5 }} onError={e=>e.target.style.display="none"}/>{imgKb&&<span style={{ fontSize:10, color:C.green }}>✓ {imgKb}KB</span>}</div>}
+            {r.image && <div style={{ display:"flex", gap:6, marginTop:5, alignItems:"center" }}><img src={r.image} alt="" style={{ width:48, height:36, objectFit:"cover", borderRadius:5 }} onError={e=>{e.target.style.display="none";e.target.nextSibling&&(e.target.nextSibling.style.display="inline");}} /><span style={{ fontSize:10, color:C.red, display:"none" }}>⚠ URL blocked — upload instead</span>{imgKb&&<span style={{ fontSize:10, color:C.green }}>✓ {imgKb}KB</span>}</div>}
             {/* Thumbnail picker */}
             {foundPhotos.length > 0 && (
               <div style={{ marginTop:8 }}>
