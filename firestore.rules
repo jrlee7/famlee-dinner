@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can read/write their own user doc
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Personal macro logs and profile
+      match /{subcollection}/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Family data — any authenticated member of the family can read/write
+    match /families/{familyId} {
+      allow read, write: if request.auth != null && isFamilyMember(familyId);
+
+      match /{subcollection}/{document=**} {
+        allow read, write: if request.auth != null && isFamilyMember(familyId);
+      }
+    }
+  }
+
+  function isFamilyMember(familyId) {
+    let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+    return userDoc.exists && userDoc.data.familyId == familyId;
+  }
+}
