@@ -415,37 +415,51 @@ exports.imageProxy = onRequest(
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     var url = (req.query.url || (req.body && req.body.url) || "").trim();
     if (!url || !url.startsWith("http")) { res.status(400).json({ error: "Missing url" }); return; }
-    var parsed;
-    try { parsed = new URL(url); } catch(e) { res.status(400).json({ error: "Invalid url" }); return; }
-    var lib = parsed.protocol === "https:" ? https : http;
-    var options = {
-      hostname: parsed.hostname,
-      port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
-      path: parsed.pathname + (parsed.search || ""),
-      method: "GET",
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "image/*,*/*" }
-    };
-    var proxyReq = lib.request(options, function(proxyRes) {
-      if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
-        res.status(400).json({ error: "Redirect not followed: " + proxyRes.headers.location }); return;
-      }
-      if (proxyRes.statusCode !== 200) { res.status(502).json({ error: "Upstream " + proxyRes.statusCode }); return; }
-      var contentType = proxyRes.headers["content-type"] || "image/jpeg";
-      var chunks = [];
-      var stream = proxyRes;
-      var enc = (proxyRes.headers["content-encoding"] || "").toLowerCase();
-      if (enc === "gzip") stream = proxyRes.pipe(zlib.createGunzip());
-      else if (enc === "deflate") stream = proxyRes.pipe(zlib.createInflate());
-      stream.on("data", function(c) { chunks.push(c); });
-      stream.on("end", function() {
-        var buf = Buffer.concat(chunks);
-        var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
-        res.json({ dataUrl: b64 });
+
+    function fetchImage(targetUrl, redirectsLeft) {
+      if (redirectsLeft < 0) { res.status(502).json({ error: "Too many redirects" }); return; }
+      var parsed;
+      try { parsed = new URL(targetUrl); } catch(e) { res.status(400).json({ error: "Invalid url" }); return; }
+      var lib = parsed.protocol === "https:" ? https : http;
+      var options = {
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+        path: parsed.pathname + (parsed.search || ""),
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        }
+      };
+      var proxyReq = lib.request(options, function(proxyRes) {
+        if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+          var next = proxyRes.headers.location;
+          if (!next.startsWith("http")) next = parsed.protocol + "//" + parsed.hostname + next;
+          proxyRes.resume();
+          fetchImage(next, redirectsLeft - 1);
+          return;
+        }
+        if (proxyRes.statusCode !== 200) { res.status(502).json({ error: "Upstream " + proxyRes.statusCode }); return; }
+        var contentType = proxyRes.headers["content-type"] || "image/jpeg";
+        var chunks = [];
+        var stream = proxyRes;
+        var enc = (proxyRes.headers["content-encoding"] || "").toLowerCase();
+        if (enc === "gzip") stream = proxyRes.pipe(zlib.createGunzip());
+        else if (enc === "deflate") stream = proxyRes.pipe(zlib.createInflate());
+        stream.on("data", function(c) { chunks.push(c); });
+        stream.on("end", function() {
+          var buf = Buffer.concat(chunks);
+          var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
+          res.json({ dataUrl: b64 });
+        });
+        stream.on("error", function(e) { res.status(500).json({ error: e.message }); });
       });
-      stream.on("error", function(e) { res.status(500).json({ error: e.message }); });
-    });
-    proxyReq.on("error", function(e) { res.status(500).json({ error: e.message }); });
-    proxyReq.end();
+      proxyReq.on("error", function(e) { res.status(500).json({ error: e.message }); });
+      proxyReq.end();
+    }
+
+    fetchImage(url, 5);
   }
 );
 
