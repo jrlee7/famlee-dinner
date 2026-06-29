@@ -2160,6 +2160,7 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
   const [r, setR] = useState({...init, cookLog:init.cookLog||[]});
   const [imgKb, setImgKb] = useState(null);
   const [newTag, setNewTag] = useState("");
+  const [showTagPicker, setShowTagPicker] = useState(false);
   const [photoSearching, setPhotoSearching] = useState(false);
   const [foundPhotos, setFoundPhotos] = useState(scrapedImages||[]);
   const [imgFailed, setImgFailed] = useState(false);
@@ -2209,14 +2210,22 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
       </div>
       {/* Tags above scroll */}
       <div style={{ marginBottom:10, padding:"9px 12px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:9 }}>
-        <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>🏷 Tags</div>
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:6 }}>
-          {customTags.map(t => { const a=(r.tags||[]).includes(t); return <button key={t} onClick={()=>set("tags",a?(r.tags||[]).filter(x=>x!==t):[...(r.tags||[]),t])} style={{ background:a?C.greenSoft:C.card, color:a?C.green:C.textMuted, border:`1px solid ${a?C.green:C.border}`, borderRadius:20, padding:"3px 9px", cursor:"pointer", fontSize:11, fontWeight:a?700:400 }}>{a?"✓ ":""}{t}</button>; })}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:showTagPicker?8:0 }}>
+          <span style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase" }}>🏷 Tags</span>
+          <div style={{ display:"flex", gap:3, flexWrap:"wrap", flex:1 }}>
+            {(r.tags||[]).map(t => <span key={t} onClick={()=>set("tags",(r.tags||[]).filter(x=>x!==t))} style={{ background:C.greenSoft, color:C.green, borderRadius:20, padding:"1px 7px", fontSize:10, fontWeight:700, cursor:"pointer" }}>✕ {t}</span>)}
+          </div>
+          <button onClick={()=>setShowTagPicker(v=>!v)} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:20, padding:"2px 9px", fontSize:11, color:C.textMuted, cursor:"pointer" }}>{showTagPicker?"Done":"+ Add"}</button>
         </div>
-        <div style={{ display:"flex", gap:5 }}>
-          <input value={newTag} onChange={e=>setNewTag(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTag()} placeholder="+ New tag… press Enter" style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"3px 11px", color:C.text, fontSize:11, maxWidth:220 }}/>
-          <button onClick={addTag} disabled={!newTag.trim()||customTags.includes(newTag.trim())} style={{ background:newTag.trim()&&!customTags.includes(newTag.trim())?C.green:C.border, color:"#0C1810", border:"none", borderRadius:20, padding:"3px 10px", cursor:"pointer", fontSize:11, fontWeight:700 }}>Add</button>
-        </div>
+        {showTagPicker && <>
+          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:6 }}>
+            {customTags.filter(t=>!(r.tags||[]).includes(t)).map(t => <button key={t} onClick={()=>set("tags",[...(r.tags||[]),t])} style={{ background:C.card, color:C.textMuted, border:`1px solid ${C.border}`, borderRadius:20, padding:"3px 9px", cursor:"pointer", fontSize:11 }}>{t}</button>)}
+          </div>
+          <div style={{ display:"flex", gap:5 }}>
+            <input value={newTag} onChange={e=>setNewTag(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTag()} placeholder="+ New tag… press Enter" style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:20, padding:"3px 11px", color:C.text, fontSize:11, maxWidth:220 }}/>
+            <button onClick={addTag} disabled={!newTag.trim()||customTags.includes(newTag.trim())} style={{ background:newTag.trim()&&!customTags.includes(newTag.trim())?C.green:C.border, color:"#0C1810", border:"none", borderRadius:20, padding:"3px 10px", cursor:"pointer", fontSize:11, fontWeight:700 }}>Add</button>
+          </div>
+        </>}
       </div>
       <div style={{ maxHeight:"56vh", overflowY:"auto", paddingRight:2 }}>
         <div style={{ display:"flex", flexWrap:"wrap", gap:9 }}>
