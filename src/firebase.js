@@ -48,9 +48,10 @@ export const saveRecipe = (familyId, recipe) =>
   setDoc(doc(db, "families", familyId, "recipes", recipe.id), recipe);
 export const deleteRecipe = (familyId, recipeId) =>
   deleteDoc(doc(db, "families", familyId, "recipes", recipeId));
-export const subscribeRecipes = (familyId, cb) =>
+export const subscribeRecipes = (familyId, cb, onErr) =>
   onSnapshot(collection(db, "families", familyId, "recipes"), snap =>
-    cb(snap.docs.map(d => d.data())));
+    cb(snap.docs.map(d => d.data())),
+    err => { console.error("subscribeRecipes error:", err.code, err.message); onErr && onErr(err); });
 
 // Meal plan
 export const saveMealPlan = (familyId, plan) =>
@@ -90,6 +91,13 @@ export const saveFamilySettings = (familyId, settings) =>
 export const subscribeFamilySettings = (familyId, cb) =>
   onSnapshot(doc(db, "families", familyId, "settings", "main"), snap =>
     cb(snap.exists() ? snap.data() : {}));
+
+// Freezer — [{recipeId, title, meals, addedAt}]
+export const saveFreezer = (familyId, items) =>
+  setDoc(doc(db, "families", familyId, "freezer", "current"), { items });
+export const subscribeFreezer = (familyId, cb) =>
+  onSnapshot(doc(db, "families", familyId, "freezer", "current"), snap =>
+    cb(snap.exists() ? snap.data().items : []));
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 export async function uploadRecipePhoto(familyId, recipeId, dataUrl) {

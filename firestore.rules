@@ -23,7 +23,7 @@ service cloud.firestore {
   }
 
   function isFamilyMember(familyId) {
-    let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-    return userDoc.exists && userDoc.data.familyId == familyId;
+    let userDoc = get(/databases/(default)/documents/users/$(request.auth.uid));
+    return userDoc.data.familyId == familyId;
   }
 }

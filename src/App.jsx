@@ -11,6 +11,7 @@ import {
   saveUserProfile, getUserProfile,
   saveMacroLog, subscribeMacroLog,
   saveFamilySettings, subscribeFamilySettings,
+  saveFreezer, subscribeFreezer,
   uploadRecipePhoto,
 } from "./firebase.js";
 
@@ -121,7 +122,7 @@ function compress(file,maxW=1200,q=0.80){
 const BLANK = () => ({
   id:"", title:"", category:"Chicken", mealType:"Dinner",
   prepTime:15, cookTime:30, servings:4, rating:4,
-  favorite:false, noRecipeNeeded:false, makesLeftovers:false,
+  favorite:false, noRecipeNeeded:false,
   image:"", source:"manual", sourceUrl:"", videoUrl:"", notes:"", tags:[],
   ingredients:[{name:"",qty:1,unit:"",pK:0,pW:0,pA:0,pS:0,pC:0,onSale:false,saleDesc:"",aisle:"Other"}],
   instructions:"1. \n2. \n3. ",
@@ -200,6 +201,7 @@ export default function App() {
   const [mealPlan,   setMealPlan]   = useState({});
   const [shopping,   setShopping]   = useState([]);
   const [pantry,     setPantry]     = useState([]);
+  const [freezer,    setFreezer]    = useState([]);
   const [settings,   setSettings]   = useState({ tags: DTAGS });
 
   // Per-user state
@@ -253,6 +255,7 @@ export default function App() {
       subscribeMealPlan(familyId, setMealPlan),
       subscribeShoppingList(familyId, setShopping),
       subscribePantry(familyId, setPantry),
+      subscribeFreezer(familyId, setFreezer),
       subscribeFamilySettings(familyId, s => setSettings({ tags: DTAGS, ...s })),
     ];
     return () => unsubs.forEach(u => u());
@@ -359,6 +362,23 @@ export default function App() {
   const setMeal    = async (k, r) => { const p = { ...mealPlan, [k]: r }; setMealPlan(p); await saveMealPlan(familyId, p); };
   const clearMeal  = async k      => { const p = { ...mealPlan }; delete p[k]; setMealPlan(p); await saveMealPlan(familyId, p); };
   const clearAllMP = async ()     => { setMealPlan({}); await saveMealPlan(familyId, {}); };
+
+  // -- Freezer -----------------------------------------------------------------
+  const addToFreezer = async (recipeId, title, meals) => {
+    const exists = freezer.find(f => f.recipeId === recipeId);
+    const updated = exists
+      ? freezer.map(f => f.recipeId === recipeId ? { ...f, meals: f.meals + meals } : f)
+      : [...freezer, { recipeId, title, meals, addedAt: new Date().toISOString() }];
+    setFreezer(updated); await saveFreezer(familyId, updated);
+  };
+  const useFreezerMeal = async (recipeId) => {
+    const updated = freezer.map(f => f.recipeId === recipeId ? { ...f, meals: f.meals - 1 } : f).filter(f => f.meals > 0);
+    setFreezer(updated); await saveFreezer(familyId, updated);
+  };
+  const removeFreezerItem = async (recipeId) => {
+    const updated = freezer.filter(f => f.recipeId !== recipeId);
+    setFreezer(updated); await saveFreezer(familyId, updated);
+  };
 
   function buildShopping() {
     const agg = {};
@@ -587,7 +607,7 @@ export default function App() {
         <div style={{ maxWidth:1300, margin:"0 auto", padding:"18px 18px" }}>
           {dbError && <div style={{ background:"#ff000022", border:"1px solid #ff4444", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:13, color:"#ff4444" }}>⚠️ Database error: {dbError}</div>}
           {tab==="recipes"  && <RecipesTab recipes={recipes} mealPlan={mealPlan} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddCat={c=>updateCats([...(settings.cats||[]),c])} recentIds={recentIds} onView={r=>setModal({type:"detail",data:r})} onEdit={r=>setModal({type:"edit",data:r})} onDup={dupRecipe} onDelete={deleteRecipe} onToggleFav={toggleFav} onToggleBook={toggleBook} onSetMeal={setMeal} setModal={setModal} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
-          {tab==="mealplan" && <MealPlanTab recipes={recipes} mealPlan={mealPlan} onSet={setMeal} onClear={clearMeal} onClearAll={clearAllMP} onBuild={buildShopping} customTags={settings.tags||DTAGS} recentIds={recentIds} setModal={setModal}/>}
+          {tab==="mealplan" && <MealPlanTab recipes={recipes} mealPlan={mealPlan} onSet={setMeal} onClear={clearMeal} onClearAll={clearAllMP} onBuild={buildShopping} customTags={settings.tags||DTAGS} recentIds={recentIds} setModal={setModal} freezer={freezer} onUseFreezerMeal={useFreezerMeal} onRemoveFreezer={removeFreezerItem}/>}
           {tab==="shopping" && <ShoppingTab shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}} pantry={pantry} krogerToken={krogerToken} onSendToKroger={sendToKrogerCart} onKrogerConnect={() => window.location.href = getKrogerAuthUrl()} krogerLoading={krogerLoading} locationId={locationId} onFindStore={findKrogerStore}/>}
           {tab==="sales"    && <MeatSalesTab locationId={locationId} recipes={recipes} onSetMeal={setMeal} onFindStore={findKrogerStore} shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}}/>}
           {tab==="book"     && <BookTab recipes={bookRecipes} onRemove={toggleBook} onView={r=>setModal({type:"detail",data:r})}/>}
@@ -601,7 +621,7 @@ export default function App() {
       {modal?.type==="manualadd" && <ReviewModal recipe={BLANK()} onClose={()=>setModal(null)} onSave={r=>{addRecipe(r);setModal(null);}} isEdit customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
       {modal?.type==="review"    && <ReviewModal recipe={modal.data} scrapedImages={modal.images||[]} onClose={()=>setModal(null)} onSave={r=>{addRecipe(r);setModal(null);}} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
       {modal?.type==="edit"      && <ReviewModal recipe={modal.data} onClose={()=>setModal(null)} onSave={r=>{updateRecipe(r);setModal(null);}} isEdit customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
-      {modal?.type==="detail"    && <DetailModal recipe={modal.data} onClose={()=>setModal(null)} onEdit={r=>setModal({type:"edit",data:r})} onToggleBook={toggleBook} onLogCook={logCook} onDup={dupRecipe} onLogMacro={entry=>{addMacroEntry(entry);setModal(null);}}/>}
+      {modal?.type==="detail"    && <DetailModal recipe={modal.data} onClose={()=>setModal(null)} onEdit={r=>setModal({type:"edit",data:r})} onToggleBook={toggleBook} onLogCook={logCook} onDup={dupRecipe} onLogMacro={entry=>{addMacroEntry(entry);setModal(null);}} freezer={freezer} onAddToFreezer={addToFreezer} onRemoveFreezer={removeFreezerItem}/>}
       {modal?.type==="pickslot"  && <PickSlotModal ctx={modal.data} recipes={recipes} onSet={setMeal} onClose={()=>setModal(null)}/>}
       {modal?.type==="quickadd"  && <ReviewModal recipe={{...BLANK(),noRecipeNeeded:true}} onClose={()=>setModal(null)} onSave={r=>{addRecipe(r);setModal(null);}} isEdit customTags={settings.tags||DTAGS} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
       {modal?.type==="userMenu"  && (
@@ -775,7 +795,6 @@ function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, on
           {hasSale && <span style={{ background:C.orange+"22", color:C.orange, border:`1px solid ${C.orange}44`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>🏷 SALE</span>}
           {inPlan  && <span style={{ background:C.green+"22",  color:C.green,  border:`1px solid ${C.green}44`,  borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>IN PLAN</span>}
           {recentlyCookd && <span style={{ background:C.accent+"22", color:C.accent, border:`1px solid ${C.accent}44`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>🍴 Recent</span>}
-          {r.makesLeftovers && <span style={{ background:C.green+"22", color:C.green, border:`1px solid ${C.green}44`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>↩</span>}
         </div>
         <div style={{ position:"absolute", top:8, right:8, display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
           <button onClick={e=>{e.stopPropagation();onToggleFav(r);}} style={{ background:"rgba(0,0,0,.6)", border:"none", borderRadius:6, width:32, height:32, cursor:"pointer", color:r.favorite?C.accent:"#fff", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>{r.favorite?"★":"☆"}</button>
@@ -828,7 +847,7 @@ function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, on
 
 
 // --- MEAL PLAN TAB ------------------------------------------------------------
-function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, customTags, recentIds, setModal }) {
+function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, customTags, recentIds, setModal, freezer=[], onUseFreezerMeal, onRemoveFreezer }) {
   const [aiLoading,     setAiLoading]     = useState(false);
   const [dragSrc,       setDragSrc]       = useState(null);
   const [minStar,       setMinStar]       = useState(() => Number(localStorage.getItem("fl_planminstar")||0));
@@ -881,7 +900,7 @@ function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, c
     setAiLoading(true);
     try {
       const list = eligible.map(r =>
-        `${r.id}|${r.title}|${r.mealType||"Dinner"}|${r.category}|${r.rating||0}stars|${(r.ingredients||[]).some(i=>i.onSale)?"SALE":""}|${priorityTag!=="None"&&(r.tags||[]).includes(priorityTag)?"PRIORITY":""}|${recentIds.includes(r.id)?"RECENT":""}`
+        `${r.id}|${r.title}|${r.mealType||"Dinner"}|${r.category}|${r.rating||0}stars|${(r.ingredients||[]).some(i=>i.onSale)?"SALE":""}|${priorityTag!=="None"&&(r.tags||[]).includes(priorityTag)?"PRIORITY":""}|${recentIds.includes(r.id)?"RECENT":""}|${freezer.find(f=>f.recipeId===r.id)?"FREEZER":""}`
       ).join("\n");
 
       const sys = `You are a meal planner. Assign recipes to a 7-day plan for Breakfast, Lunch, and Dinner slots.
@@ -893,6 +912,7 @@ STRICT RULES:
 - A recipe with mealType "Any" or blank can go in any slot
 - Snack, Dessert, Bread, Side Dish recipes should be skipped unless no other options exist
 - ${priorityTag!=="None"?`STRONGLY prefer PRIORITY tagged recipes. `:""}${saleFirst?"Prefer SALE recipes to save money. ":""}Avoid RECENT recipes if possible. Vary proteins and categories daily.
+- FREEZER recipes already have cooked meals stored in the freezer — prefer using them for some slots to use up freezer stock before cooking more.
 
 Return ONLY valid JSON with this exact format:
 {"Monday_Breakfast":"id","Monday_Lunch":"id","Monday_Dinner":"id","Tuesday_Breakfast":"id",...}
@@ -902,11 +922,16 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
       const plan = JSON.parse(raw.replace(/```json|```/g,"").trim());
       for (const [k, id] of Object.entries(plan)) {
         const r = eligible.find(x => x.id === id);
-        if (r) { const [d,m] = k.split("_"); await onSet(`${d}_${m}`, r); }
+        if (r) {
+          const [d,m] = k.split("_");
+          await onSet(`${d}_${m}`, r);
+          if (freezer.find(f=>f.recipeId===r.id) && onUseFreezerMeal) await onUseFreezerMeal(r.id);
+        }
       }
     } catch(e) { console.error(e); }
     setAiLoading(false);
   }
+
 
   const now = new Date();
   const md  = new Date(now.getFullYear(), now.getMonth()+monthOffset, 1);
@@ -1029,13 +1054,12 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
                   const key = `${day}_${meal}`;
                   const recipe = mealPlan[key];
                   return (
-                    <div key={meal} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(dragSrc)onSet(key,dragSrc);}}
+                    <div key={meal} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(dragSrc){onSet(key,dragSrc);if(dragSrc.fromFreezer)onUseFreezerMeal(dragSrc.id);}}}
                       onClick={()=>!recipe&&setModal({type:"pickslot",data:{day,meal,key}})}
                       style={{ padding:"6px 7px", minHeight:65, cursor:recipe?"default":"pointer", borderBottom:mi<MEALS.length-1?`1px solid ${C.border}`:"none" }}>
                       <div style={{ fontSize:8, color:C.textMuted, fontWeight:700, marginBottom:2, textTransform:"uppercase" }}>{meal}</div>
                       {recipe
                         ? <div>
-                            {recipe.makesLeftovers && <div style={{ fontSize:8, color:C.green, marginBottom:1 }}>↩ leftovers</div>}
                             <div style={{ fontSize:10, color:C.text, lineHeight:1.2, marginBottom:3, fontWeight:600 }}>{recipe.title}</div>
                             <button onClick={e=>{e.stopPropagation();onClear(key);}} style={{ fontSize:8, color:C.red, background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ remove</button>
                           </div>
@@ -1047,6 +1071,25 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
               </div>
             ))}
           </div>
+          {freezer.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, color:"#4FA8D8", fontWeight:700, marginBottom:7, textTransform:"uppercase" }}>❄️ Freezer Stock — drag onto calendar</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {freezer.map(f => {
+                  const r = recipes.find(x => x.id === f.recipeId);
+                  if (!r) return null;
+                  const dragObj = { ...r, fromFreezer:true };
+                  return (
+                    <div key={f.recipeId} draggable onDragStart={()=>setDragSrc(dragObj)} onDragEnd={()=>setDragSrc(null)}
+                      style={{ background:dragSrc?.id===r.id&&dragSrc.fromFreezer?"#4FA8D822":C.card, border:"1px solid #4FA8D8", borderRadius:8, padding:"5px 10px", cursor:"grab", fontSize:11, color:"#4FA8D8", fontWeight:700, display:"flex", alignItems:"center", gap:6, userSelect:"none" }}>
+                      ❄️ {r.title} <span style={{ background:"#4FA8D833", borderRadius:10, padding:"1px 6px", fontSize:10 }}>×{f.meals}</span>
+                      <button onClick={()=>onRemoveFreezer(f.recipeId)} style={{ background:"none", border:"none", color:"#4FA8D8", cursor:"pointer", fontSize:11, padding:0 }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ fontSize:10, color:C.textMuted, fontWeight:700, marginBottom:7, textTransform:"uppercase" }}>Drag onto calendar</div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {eligible.map(r => {
@@ -1056,7 +1099,6 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
                 <div key={r.id} draggable onDragStart={()=>setDragSrc(r)} onDragEnd={()=>setDragSrc(null)}
                   style={{ background:dragSrc?.id===r.id?C.accentSoft:hp?C.greenSoft:C.card, border:`1px solid ${hp?C.green:hs?C.orange:C.border}`, borderRadius:8, padding:"5px 10px", cursor:"grab", fontSize:11, color:hp?C.green:hs?C.orange:C.text, fontWeight:hp||hs?700:400, display:"flex", alignItems:"center", gap:4, userSelect:"none" }}>
                   {hp&&"🏷"}{hs&&!hp&&"🏷"}{r.noRecipeNeeded&&"⚡"}{r.title}
-                  {r.makesLeftovers&&<span style={{fontSize:9,color:C.green}}>↩</span>}
                 </div>
               );
             })}
@@ -1679,7 +1721,7 @@ function GoalsTab({ profile, onSave }) {
 }
 
 // --- DETAIL MODAL -------------------------------------------------------------
-function DetailModal({ recipe:r, onClose, onEdit, onToggleBook, onLogCook, onDup, onLogMacro }) {
+function DetailModal({ recipe:r, onClose, onEdit, onToggleBook, onLogCook, onDup, onLogMacro, freezer=[], onAddToFreezer, onRemoveFreezer }) {
   const [tab, setTab] = useState("instructions");
   const [scale, setScale] = useState(r.servings||4);
   const [showMacroLog, setShowMacroLog] = useState(false);
@@ -1687,8 +1729,11 @@ function DetailModal({ recipe:r, onClose, onEdit, onToggleBook, onLogCook, onDup
   const [cookNote, setCookNote] = useState("");
   const [cookRating, setCookRating] = useState(r.rating||5);
   const [cookSaved, setCookSaved] = useState(false);
+  const [showFreezer, setShowFreezer] = useState(false);
+  const [freezerMeals, setFreezerMeals] = useState(1);
   const ratio = scale / (r.servings||4);
   const fmt2 = qty => { const s=qty*ratio; return s===Math.round(s)?String(s):s.toFixed(1).replace(/\.0$/,""); };
+  const freezerEntry = freezer.find(f => f.recipeId === r.id);
 
   return (
     <Modal onClose={onClose} width={620} noPad>
@@ -1705,7 +1750,6 @@ function DetailModal({ recipe:r, onClose, onEdit, onToggleBook, onLogCook, onDup
         {!r.image && <div style={{ fontFamily:FD, fontSize:22, fontWeight:700, marginBottom:8 }}>{r.title}</div>}
         <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", marginBottom:8 }}>
           {[r.category,r.mealType,...(r.tags||[])].map(t => <span key={t} style={{ background:C.accentSoft, color:C.accent, border:`1px solid ${C.accentDim}44`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>{t}</span>)}
-          {r.makesLeftovers && <span style={{ background:C.greenSoft, color:C.green, border:`1px solid ${C.greenDim}44`, borderRadius:20, padding:"2px 8px", fontSize:10, fontWeight:700 }}>↩ Leftovers</span>}
         </div>
         <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
           <Stars n={r.rating}/>
@@ -1727,7 +1771,24 @@ function DetailModal({ recipe:r, onClose, onEdit, onToggleBook, onLogCook, onDup
           <Btn variant={r.inBook?"secondary":"ghost"} onClick={()=>onToggleBook(r)} style={{ padding:"5px 10px", fontSize:12 }}>{r.inBook?"📖 In Book":"📖 Add to Book"}</Btn>
           <Btn variant="primary" onClick={()=>setTab("cooklog")} style={{ padding:"5px 10px", fontSize:12 }}>🍴 Cooked It!</Btn>
           {r.macros?.calories > 0 && <Btn variant="secondary" onClick={()=>setShowMacroLog(v=>!v)} style={{ padding:"5px 10px", fontSize:12 }}>📊 Log to Macros</Btn>}
+          <Btn variant={freezerEntry?"secondary":"ghost"} onClick={()=>setShowFreezer(v=>!v)} style={{ padding:"5px 10px", fontSize:12 }}>❄️ {freezerEntry?`In Freezer (${freezerEntry.meals})`:"Add to Freezer"}</Btn>
         </div>
+        {/* Freezer panel */}
+        {showFreezer && (
+          <div style={{ background:"#4FA8D8"+"18", border:"1px solid #4FA8D844", borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
+            <div style={{ fontSize:11, color:"#4FA8D8", fontWeight:700, marginBottom:8 }}>❄️ Freezer Meals — {r.title}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+              <span style={{ fontSize:12, color:C.textDim }}>Meals to add:</span>
+              <button onClick={()=>setFreezerMeals(n=>Math.max(1,n-1))} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:22, height:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>−</button>
+              <span style={{ fontFamily:FD, fontSize:18, fontWeight:700, color:"#4FA8D8", minWidth:24, textAlign:"center" }}>{freezerMeals}</span>
+              <button onClick={()=>setFreezerMeals(n=>n+1)} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:22, height:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>+</button>
+            </div>
+            <div style={{ display:"flex", gap:7 }}>
+              <Btn variant="primary" onClick={()=>{onAddToFreezer(r.id,r.title,freezerMeals);setShowFreezer(false);setFreezerMeals(1);}} style={{ flex:1, justifyContent:"center" }}>✅ Add {freezerMeals} meal{freezerMeals>1?"s":""}</Btn>
+              {freezerEntry && <Btn variant="danger" onClick={()=>{onRemoveFreezer(r.id);setShowFreezer(false);}} style={{ padding:"5px 10px", fontSize:12 }}>Clear</Btn>}
+            </div>
+          </div>
+        )}
         {/* Macro log panel */}
         {showMacroLog && r.macros?.calories > 0 && (
           <div style={{ background:C.greenSoft, border:`1px solid ${C.greenDim}44`, borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
@@ -1831,7 +1892,7 @@ function PickSlotModal({ ctx, recipes, onSet, onClose }) {
             {r.image && <img src={r.image} style={{ width:36, height:36, borderRadius:5, objectFit:"cover", flexShrink:0 }} onError={e=>e.target.style.display="none"}/>}
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.title}</div>
-              <div style={{ fontSize:10, color:C.textDim }}>{r.category} · ⏱{r.prepTime+r.cookTime}m{r.noRecipeNeeded?" · ⚡":""}{r.makesLeftovers?" · ↩":""}</div>
+              <div style={{ fontSize:10, color:C.textDim }}>{r.category} · ⏱{r.prepTime+r.cookTime}m{r.noRecipeNeeded?" · ⚡":""}</div>
             </div>
             <Stars n={r.rating}/>
           </button>
@@ -1854,7 +1915,7 @@ CRITICAL RULES:
 - Estimate realistic grocery prices: pK=Kroger, pW=Walmart (5-10% less), pA=Aldi (25-40% less), pS=Sam's, pC=Costco. IMPORTANT: prices are the cost of the AMOUNT USED in this recipe, not the cost of the whole package. E.g. if the recipe uses 500g of bread flour and a 5lb bag costs $4, set pK=0.88 (500g is about 22% of the bag). If the recipe uses 2 eggs from a $3 dozen, set pK=0.50. Never set a price above $15 for a single ingredient amount.
 
 Return this exact JSON structure:
-{"title":"","category":"Chicken|Beef|Pork|Seafood|Vegetarian|Pasta|Soup|Salad|Side Dish|Dessert|Breakfast|Bread|Other","mealType":"Breakfast|Lunch|Dinner|Side Dish|Snack|Dessert|Bread","prepTime":15,"cookTime":30,"servings":4,"rating":4,"favorite":false,"noRecipeNeeded":false,"makesLeftovers":false,"image":"","source":"paste","sourceUrl":"","videoUrl":"","notes":"","tags":[],"ingredients":[{"name":"","qty":1.0,"unit":"","pK":0,"pW":0,"pA":0,"pS":0,"pC":0,"onSale":false,"saleDesc":"","aisle":"Other"}],"instructions":"1. Step\n2. Step","macros":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0,"sodium":0},"cookLog":[]}
+{"title":"","category":"Chicken|Beef|Pork|Seafood|Vegetarian|Pasta|Soup|Salad|Side Dish|Dessert|Breakfast|Bread|Other","mealType":"Breakfast|Lunch|Dinner|Side Dish|Snack|Dessert|Bread","prepTime":15,"cookTime":30,"servings":4,"rating":4,"favorite":false,"noRecipeNeeded":false,"image":"","source":"paste","sourceUrl":"","videoUrl":"","notes":"","tags":[],"ingredients":[{"name":"","qty":1.0,"unit":"","pK":0,"pW":0,"pA":0,"pS":0,"pC":0,"onSale":false,"saleDesc":"","aisle":"Other"}],"instructions":"1. Step\n2. Step","macros":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0,"sodium":0},"cookLog":[]}
 
 Return ONLY the JSON object. No markdown, no explanation, no backticks.`;
 
@@ -1998,7 +2059,7 @@ function ImportModal({ onClose, onParsed, customTags, onAddTag }) {
             title: url.replace(/https?:\/\/(www\.)?/,"").split("/").filter(Boolean).pop()?.replace(/-/g," ") || "Recipe from link",
             category: "Other", mealType: "Dinner",
             prepTime: 0, cookTime: 0, servings: 4, rating: 3,
-            favorite: false, noRecipeNeeded: false, makesLeftovers: false,
+            favorite: false, noRecipeNeeded: false,
             image: scrapedImgs[0] || "", source: "url", sourceUrl: url.trim(),
             videoUrl: "", notes: "Imported from link — add ingredients and steps manually.",
             tags: [], ingredients: [], instructions: "", cookLog: [],
@@ -2239,7 +2300,7 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
           </div>
         </div>
         <div style={{ display:"flex", gap:8, marginBottom:10, flexWrap:"wrap" }}>
-          {[["noRecipeNeeded","⚡ Quick Meal"],["makesLeftovers","↩ Makes Leftovers"]].map(([field,label]) => (
+          {[["noRecipeNeeded","⚡ Quick Meal"]].map(([field,label]) => (
             <button key={field} onClick={()=>set(field,!r[field])} style={{ display:"flex", alignItems:"center", gap:6, background:r[field]?C.greenSoft:C.surface, border:`1px solid ${r[field]?C.green:C.border}`, borderRadius:8, padding:"5px 11px", cursor:"pointer", fontSize:12, color:r[field]?C.green:C.textDim, fontWeight:r[field]?700:400 }}>
               <span style={{ width:28, height:16, borderRadius:8, background:r[field]?C.green:C.border, position:"relative", display:"inline-block" }}><span style={{ position:"absolute", top:2, left:r[field]?14:2, width:12, height:12, borderRadius:"50%", background:"#fff", transition:"left .2s" }}/></span>{label}
             </button>
