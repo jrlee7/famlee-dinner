@@ -37,6 +37,7 @@ const callAI = async (system, user, tokens = 1400) => {
 
 // Cloud functions still used for Kroger cart
 const FN = "https://us-central1-famlee-dinner-374bd.cloudfunctions.net";
+const FN_EAST = "https://us-east1-famlee-dinner-374bd.cloudfunctions.net";
 const callFn = async (name, body) => {
   const r = await fetch(`${FN}/${name}`, {
     method: "POST",
@@ -164,14 +165,17 @@ function Modal({children,onClose,width=540,noPad=false}){
 // --- KROGER CART SERVICE ------------------------------------------------------
 const KROGER_CLIENT_ID = "famleerecipies-bbcfcxq2";
 const KROGER_REDIRECT  = `${window.location.origin}/kroger-callback`;
-const KROGER_SCOPE     = "product.compact cart.basic:write profile.compact";
+const KROGER_SCOPE     = "product.compact cart.basic:write";
 
 function getKrogerAuthUrl() {
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem("kroger_state", state);
   const params = new URLSearchParams({
     scope: KROGER_SCOPE,
     client_id: KROGER_CLIENT_ID,
     redirect_uri: KROGER_REDIRECT,
     response_type: "code",
+    state,
   });
   return `https://api.kroger.com/v1/connect/oauth2/authorize?${params}`;
 }
@@ -186,6 +190,7 @@ export default function App() {
   const [authUser,   setAuthUser]   = useState(null);
   const [familyId,   setFamilyId]   = useState(null);
   const [loading,    setLoading]    = useState(true);
+  const [dbError,    setDbError]    = useState(null);
   const [joinCode,   setJoinCode]   = useState("");
   const [showJoin,   setShowJoin]   = useState(false);
   const [joinErr,    setJoinErr]    = useState("");
@@ -244,7 +249,7 @@ export default function App() {
   useEffect(() => {
     if (!familyId) return;
     const unsubs = [
-      subscribeRecipes(familyId, setRecipes),
+      subscribeRecipes(familyId, setRecipes, e => setDbError(e.code + ": " + e.message)),
       subscribeMealPlan(familyId, setMealPlan),
       subscribeShoppingList(familyId, setShopping),
       subscribePantry(familyId, setPantry),
@@ -420,18 +425,6 @@ export default function App() {
     const krogerItems = items.filter(i => (i.assignedStore||"kroger") === "kroger" && !i.checked);
     if (!krogerItems.length) { alert("No unchecked Kroger items on your list."); setKrogerLoading(false); return; }
 
-    // Get client credentials token for product search
-    let searchToken;
-    try {
-      const clientTok = await callFn("krogerToken", {});
-      searchToken = clientTok.access_token;
-      if (!searchToken) throw new Error("No client token");
-    } catch(e) {
-      alert("Could not get Kroger search token: " + e.message);
-      setKrogerLoading(false);
-      return;
-    }
-
     const cartItems = [];
     const notFound = [];
     for (const item of krogerItems.slice(0, 20)) {
@@ -441,7 +434,8 @@ export default function App() {
         .replace(/\b(boneless|skinless|fresh|frozen|dried|minced|sliced|diced|chopped|ground|whole|large|small|medium|cut into strips|florets)\b/gi, "")
         .replace(/\s+/g, " ").trim();
       try {
-        const results = await callFn("krogerSearch", { query: cleanName, locationId });
+        const results = await (async () => { const r = await fetch(`${FN_EAST}/krogerSearch`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ query: cleanName, locationId, token: userToken }) }); return r.json(); })();
+        console.log(`kroger search "${cleanName}":`, JSON.stringify(results).slice(0,200));
         const product = results?.data?.[0];
         console.log(`"${cleanName}" first result:`, JSON.stringify(product).slice(0,200));
         if (product) {
@@ -479,19 +473,9 @@ export default function App() {
 
   async function findKrogerStore(zip) {
     try {
-      // Try client credentials token first (doesn't expire with user session)
-      let token;
-      try {
-        const clientTok = await callFn("krogerToken", {});
-        token = clientTok.access_token;
-        console.log("Using client token for location search, len:", token?.length);
-      } catch(e) {
-        console.log("Client token failed, trying user token");
-      }
-      // Fall back to user token
-      if (!token) token = krogerToken?.access_token;
+      const token = krogerToken?.access_token;
       if (!token) { alert("Connect your Kroger account first, then find your store."); return null; }
-      const results = await callFn("krogerLocations", { zipCode: zip, token });
+      const results = await (async () => { const r = await fetch(`${FN_EAST}/krogerLocations`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ zipCode: zip, token }) }); return r.json(); })();
       console.log("Location results:", JSON.stringify(results).slice(0,300));
       const stores = results?.data || [];
       if (!stores.length) { alert("No Kroger stores found near ZIP " + zip + ". Try a nearby ZIP code."); return null; }
@@ -602,6 +586,7 @@ export default function App() {
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto" }}>
         <div style={{ maxWidth:1300, margin:"0 auto", padding:"18px 18px" }}>
+          {dbError && <div style={{ background:"#ff000022", border:"1px solid #ff4444", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:13, color:"#ff4444" }}>⚠️ Database error: {dbError}</div>}
           {tab==="recipes"  && <RecipesTab recipes={recipes} mealPlan={mealPlan} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddCat={c=>updateCats([...(settings.cats||[]),c])} recentIds={recentIds} onView={r=>setModal({type:"detail",data:r})} onEdit={r=>setModal({type:"edit",data:r})} onDup={dupRecipe} onDelete={deleteRecipe} onToggleFav={toggleFav} onToggleBook={toggleBook} onSetMeal={setMeal} setModal={setModal} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
           {tab==="mealplan" && <MealPlanTab recipes={recipes} mealPlan={mealPlan} onSet={setMeal} onClear={clearMeal} onClearAll={clearAllMP} onBuild={buildShopping} customTags={settings.tags||DTAGS} recentIds={recentIds} setModal={setModal}/>}
           {tab==="shopping" && <ShoppingTab shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}} pantry={pantry} krogerToken={krogerToken} onSendToKroger={sendToKrogerCart} onKrogerConnect={() => window.location.href = getKrogerAuthUrl()} krogerLoading={krogerLoading} locationId={locationId} onFindStore={findKrogerStore}/>}

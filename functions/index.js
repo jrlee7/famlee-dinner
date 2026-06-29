@@ -1,13 +1,13 @@
-"use strict";
+"use strict"; // v2
 
 const { onRequest } = require("firebase-functions/v2/https");
 const https = require("https");
 const http = require("http");
 const zlib = require("zlib");
 
-const KROGER_CLIENT_ID = process.env.KROGER_CLIENT_ID;
-const KROGER_CLIENT_SECRET = process.env.KROGER_CLIENT_SECRET;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const KROGER_CLIENT_ID = (process.env.KROGER_CLIENT_ID || "").trim();
+const KROGER_CLIENT_SECRET = (process.env.KROGER_CLIENT_SECRET || "").trim();
+const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
 
 function fetchUrl(urlStr, opts) {
   if (!opts) opts = {};
@@ -81,27 +81,40 @@ exports.krogerToken = onRequest(
 );
 
 exports.krogerSearch = onRequest(
-  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
+  { cors: true, region: "us-east1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     var query = req.body.query;
     var locationId = req.body.locationId;
-    console.log("krogerSearch - query:", query, "locationId:", locationId);
-    var creds = Buffer.from(KROGER_CLIENT_ID + ":" + KROGER_CLIENT_SECRET).toString("base64");
-    fetchUrl("https://api.kroger.com/v1/connect/oauth2/token", {
-      method: "POST",
-      headers: { "Authorization": "Basic " + creds, "Content-Type": "application/x-www-form-urlencoded" },
-      body: "grant_type=client_credentials&scope=product.compact"
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(tokenData) {
-      var token = tokenData.access_token;
-      if (!token) throw new Error("No token: " + JSON.stringify(tokenData));
-      var url = "https://api.kroger.com/v1/products?filter.term=" + encodeURIComponent(query) +
-        "&filter.locationId=" + locationId + "&filter.limit=5";
-      return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } });
-    })
+    var userToken = req.body.token;
+    console.log("krogerSearch - query:", query, "locationId:", locationId, "hasUserToken:", !!userToken);
+    var url = "https://api.kroger.com/v1/products?filter.term=" + encodeURIComponent(query) +
+      "&filter.locationId=" + locationId + "&filter.limit=5";
+    var krogerHeaders = { "Accept": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Referer": "https://www.kroger.com/", "Origin": "https://www.kroger.com" };
+
+    function doSearch(token) {
+      return fetchUrl(url, { headers: Object.assign({ "Authorization": "Bearer " + token }, krogerHeaders) });
+    }
+
+    var searchPromise;
+    if (userToken) {
+      searchPromise = doSearch(userToken);
+    } else {
+      var creds = Buffer.from(KROGER_CLIENT_ID + ":" + KROGER_CLIENT_SECRET).toString("base64");
+      searchPromise = fetchUrl("https://api.kroger.com/v1/connect/oauth2/token", {
+        method: "POST",
+        headers: { "Authorization": "Basic " + creds, "Content-Type": "application/x-www-form-urlencoded" },
+        body: "grant_type=client_credentials&scope=product.compact"
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(tokenData) {
+        var token = tokenData.access_token;
+        if (!token) throw new Error("No token: " + JSON.stringify(tokenData));
+        return doSearch(token);
+      });
+    }
+    searchPromise
     .then(function(r) {
       return r.text().then(function(text) {
         console.log("krogerSearch response:", text.slice(0,300));
@@ -207,7 +220,7 @@ exports.krogerOAuthExchange = onRequest(
     var secret = KROGER_CLIENT_SECRET;
     var creds = Buffer.from(KROGER_CLIENT_ID + ":" + secret).toString("base64");
     var body = "grant_type=authorization_code&code=" + code + "&redirect_uri=" + encodeURIComponent(redirectUri);
-    console.log("Kroger exchange - clientId:", KROGER_CLIENT_ID, "secretLen:", secret.length, "codeLen:", (code||"").length);
+    console.log("Kroger exchange - clientId:", KROGER_CLIENT_ID, "secretPrefix:", secret.slice(0,4), "codeLen:", (code||"").length);
     fetchUrl("https://api.kroger.com/v1/connect/oauth2/token", {
       method: "POST",
       headers: { "Authorization": "Basic " + creds, "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
@@ -265,32 +278,46 @@ exports.krogerAddToCart = onRequest(
 );
 
 exports.krogerLocations = onRequest(
-  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
+  { cors: true, region: "us-east1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     var zipCode = req.body.zipCode;
-    // Get a client credentials token with no scope — locations API is public
-    var creds = Buffer.from(KROGER_CLIENT_ID + ":" + KROGER_CLIENT_SECRET).toString("base64");
-    fetchUrl("https://api.kroger.com/v1/connect/oauth2/token", {
-      method: "POST",
-      headers: { "Authorization": "Basic " + creds, "Content-Type": "application/x-www-form-urlencoded" },
-      body: "grant_type=client_credentials&scope=product.compact"
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(tokenData) {
-      var token = tokenData.access_token;
-      if (!token) throw new Error("No token: " + JSON.stringify(tokenData));
-      var url = "https://api.kroger.com/v1/locations?filter.zipCode.near=" + zipCode +
-        "&filter.limit=10&filter.radiusInMiles=20";
-      return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } });
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      console.log("krogerLocations result:", JSON.stringify(d).slice(0,200));
-      res.json(d);
-    })
-    .catch(function(e) { res.status(500).json({ error: e.message }); });
+    var userToken = req.body.token;
+    var url = "https://api.kroger.com/v1/locations?filter.zipCode.near=" + zipCode +
+      "&filter.limit=10&filter.radiusInMiles=20";
+
+    console.log("krogerLocations - zip:", zipCode, "hasUserToken:", !!userToken, "tokenLen:", (userToken||"").length);
+
+    function doSearch(token) {
+      return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Referer": "https://www.kroger.com/", "Origin": "https://www.kroger.com" } })
+        .then(function(r) {
+          return r.text().then(function(text) {
+            console.log("krogerLocations HTTP status:", r.status, "body:", text.slice(0,300));
+            try { var d = JSON.parse(text); res.json(d); }
+            catch(e) { res.status(500).json({ error: "Bad JSON from Kroger", status: r.status, raw: text.slice(0,200) }); }
+          });
+        });
+    }
+
+    // Use user's OAuth token if available, otherwise get client credentials token
+    if (userToken) {
+      doSearch(userToken).catch(function(e) { res.status(500).json({ error: e.message }); });
+    } else {
+      var creds = Buffer.from(KROGER_CLIENT_ID + ":" + KROGER_CLIENT_SECRET).toString("base64");
+      fetchUrl("https://api.kroger.com/v1/connect/oauth2/token", {
+        method: "POST",
+        headers: { "Authorization": "Basic " + creds, "Content-Type": "application/x-www-form-urlencoded" },
+        body: "grant_type=client_credentials&scope=product.compact"
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(tokenData) {
+        var token = tokenData.access_token;
+        if (!token) throw new Error("No client token: " + JSON.stringify(tokenData));
+        return doSearch(token);
+      })
+      .catch(function(e) { res.status(500).json({ error: e.message }); });
+    }
   }
 );
 
