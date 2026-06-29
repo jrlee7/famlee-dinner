@@ -453,12 +453,24 @@ exports.imageProxy = onRequest(
         stream.on("data", function(c) { chunks.push(c); });
         stream.on("end", function() {
           var buf = Buffer.concat(chunks);
+          var ct = contentType.split(";")[0].trim();
+          // If we got HTML, extract og:image and redirect to it
+          if (ct === "text/html") {
+            var html = buf.toString("utf8");
+            var ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+                       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+            if (ogMatch && ogMatch[1]) {
+              fetchImage(ogMatch[1], 5);
+            } else {
+              res.status(422).send("No image found on page");
+            }
+            return;
+          }
           if (asJson) {
-            var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
+            var b64 = "data:" + ct + ";base64," + buf.toString("base64");
             res.json({ dataUrl: b64 });
           } else {
-            // Stream raw image bytes so an <img src> can point straight here
-            res.set("Content-Type", contentType.split(";")[0]);
+            res.set("Content-Type", ct);
             res.set("Cache-Control", "public, max-age=86400");
             res.status(200).send(buf);
           }
