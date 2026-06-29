@@ -150,60 +150,53 @@ exports.krogerCheckSales = onRequest(
       var token = tokenData.access_token;
       if (!token) throw new Error("No token");
 
-      // Search for each ingredient sequentially
-      var results = [];
-      var chain = Promise.resolve();
-
-      ingredients.forEach(function(ingredient) {
-        chain = chain.then(function() {
-          var url = "https://api.kroger.com/v1/products?filter.term=" + encodeURIComponent(ingredient) +
-            "&filter.locationId=" + locationId + "&filter.limit=3";
-          return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-              var products = (data.data || []);
-              var saleProducts = products.filter(function(p) {
-                var price = (p.items || [])[0]?.price;
-                return price && price.promo && price.promo > 0 && price.promo < price.regular;
-              });
-
-              if (saleProducts.length > 0) {
-                var p = saleProducts[0];
-                var price = (p.items || [])[0].price;
-                var savings = (price.regular - price.promo).toFixed(2);
-                var pct = Math.round((savings / price.regular) * 100);
-                results.push({
-                  ingredient: ingredient,
-                  productName: p.description,
-                  regularPrice: price.regular,
-                  salePrice: price.promo,
-                  savings: savings,
-                  pctOff: pct,
-                  saleDesc: "$" + price.promo.toFixed(2) + " (reg $" + price.regular.toFixed(2) + ", save " + pct + "%)",
-                  upc: (p.items || [])[0]?.itemId || p.productId,
-                  onSale: true,
-                });
-              } else if (products.length > 0) {
-                var p2 = products[0];
-                var price2 = (p2.items || [])[0]?.price;
-                results.push({
-                  ingredient: ingredient,
-                  productName: p2.description,
-                  regularPrice: price2?.regular || 0,
-                  salePrice: null,
-                  savings: 0,
-                  pctOff: 0,
-                  saleDesc: "",
-                  upc: (p2.items || [])[0]?.itemId || p2.productId,
-                  onSale: false,
-                });
-              }
-            })
-            .catch(function() {});
-        });
-      });
-
-      return chain.then(function() { return results; });
+      // Search all ingredients in parallel
+      return Promise.all(ingredients.map(function(ingredient) {
+        var url = "https://api.kroger.com/v1/products?filter.term=" + encodeURIComponent(ingredient) +
+          "&filter.locationId=" + locationId + "&filter.limit=3";
+        return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var products = (data.data || []);
+            var saleProducts = products.filter(function(p) {
+              var price = (p.items || [])[0]?.price;
+              return price && price.promo && price.promo > 0 && price.promo < price.regular;
+            });
+            if (saleProducts.length > 0) {
+              var p = saleProducts[0];
+              var price = (p.items || [])[0].price;
+              var savings = (price.regular - price.promo).toFixed(2);
+              var pct = Math.round((savings / price.regular) * 100);
+              return {
+                ingredient: ingredient,
+                productName: p.description,
+                regularPrice: price.regular,
+                salePrice: price.promo,
+                savings: savings,
+                pctOff: pct,
+                saleDesc: "$" + price.promo.toFixed(2) + " (reg $" + price.regular.toFixed(2) + ", save " + pct + "%)",
+                upc: (p.items || [])[0]?.itemId || p.productId,
+                onSale: true,
+              };
+            } else if (products.length > 0) {
+              var p2 = products[0];
+              var price2 = (p2.items || [])[0]?.price;
+              return {
+                ingredient: ingredient,
+                productName: p2.description,
+                regularPrice: price2?.regular || 0,
+                salePrice: null,
+                savings: 0,
+                pctOff: 0,
+                saleDesc: "",
+                upc: (p2.items || [])[0]?.itemId || p2.productId,
+                onSale: false,
+              };
+            }
+            return null;
+          })
+          .catch(function() { return null; });
+      })).then(function(results) { return results.filter(Boolean); });
     })
     .then(function(results) { res.json({ results: results }); })
     .catch(function(e) { res.status(500).json({ error: e.message }); });
@@ -252,7 +245,7 @@ exports.krogerRefresh = onRequest(
 );
 
 exports.krogerAddToCart = onRequest(
-  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
+  { cors: true, region: "us-east1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
