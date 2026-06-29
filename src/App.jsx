@@ -46,6 +46,21 @@ const callFn = async (name, body) => {
   return r.json();
 };
 
+// Route an arbitrary image URL through the proxy (defeats hotlink protection).
+// Leaves data URLs, already-proxied URLs, and known-good CDNs (pexels/unsplash) untouched.
+const proxify = u => {
+  if (!u || !u.startsWith("http")) return u;
+  if (u.includes("/imageProxy")) return u;
+  if (/images\.(pexels|unsplash)\.com/.test(u)) return u;
+  return `${FN}/imageProxy?url=${encodeURIComponent(u)}`;
+};
+const deproxify = u => {
+  if (u && u.includes("/imageProxy?url=")) {
+    try { return decodeURIComponent(u.split("url=")[1].split("&")[0]); } catch { return u; }
+  }
+  return u;
+};
+
 // USDA key (public, rate-limited - safe to have in frontend)
 const USDA_KEY = "jLgLIlkmkGiGw7jRc0otN54pU2XTEaE8EVaQgalb";
 
@@ -1973,9 +1988,9 @@ function ImportModal({ onClose, onParsed, customTags, onAddTag }) {
           console.log("Scraped result:", JSON.stringify({ imageCount: sr.images?.length, image: sr.image, source: sr.source, warning: sr.warning }));
           content = sr.text || "";
           if (sr.images && sr.images.length > 0) {
-            scrapedImgs = sr.images;
-            setScrapedImages(sr.images);
-            if (!imgUrl && sr.images[0]) setImgUrl(sr.images[0]);
+            scrapedImgs = sr.images.map(proxify);
+            setScrapedImages(scrapedImgs);
+            if (!imgUrl && scrapedImgs[0]) setImgUrl(scrapedImgs[0]);
           }
           if (sr.warning) setError("⚠️ " + sr.warning);
         } catch { content = ""; }
@@ -2148,8 +2163,7 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
   const [newTag, setNewTag] = useState("");
   const [photoSearching, setPhotoSearching] = useState(false);
   const [foundPhotos, setFoundPhotos] = useState(scrapedImages||[]);
-  const [imgProxying, setImgProxying] = useState(false);
-  const [imgProxyFailed, setImgProxyFailed] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
   const fileRef = useRef();
   const set = (k,v) => setR(p => ({...p,[k]:v}));
 
@@ -2229,26 +2243,16 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
           <div>
             <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:4 }}>📷 Photo</div>
             <div style={{ display:"flex", gap:5 }}>
-              <input value={r.image?.startsWith("data:")?"":r.image||""} onChange={e=>{
-                const val = e.target.value;
-                set("image", val);
-                setImgProxyFailed(false);
-                if (val.startsWith("http") && !r.sourceUrl) set("sourceUrl", val);
+              <input value={r.image?.startsWith("data:")?"":deproxify(r.image)||""} onChange={e=>{
+                const val = e.target.value.trim();
+                setImgFailed(false);
                 if (val.startsWith("http")) {
-                  setImgProxying(true);
-                  fetch(`${FN}/imageProxy?url=${encodeURIComponent(val)}`)
-                    .then(res => res.json())
-                    .then(d => {
-                      setImgProxying(false);
-                      if (d.dataUrl) {
-                        set("image", d.dataUrl);
-                        setFoundPhotos(prev => [d.dataUrl, ...prev.filter(p=>p!==val)]);
-                      } else {
-                        setImgProxyFailed(true);
-                        setFoundPhotos(prev => prev.includes(val) ? prev : [val, ...prev]);
-                      }
-                    })
-                    .catch(()=>{ setImgProxying(false); setImgProxyFailed(true); setFoundPhotos(prev => prev.includes(val) ? prev : [val, ...prev]); });
+                  if (!r.sourceUrl) set("sourceUrl", val);
+                  const px = proxify(val);
+                  set("image", px);
+                  setFoundPhotos(prev => prev.includes(px) ? prev : [px, ...prev]);
+                } else {
+                  set("image", val);
                 }
               }} placeholder="Paste image URL or upload…" style={{ flex:1, background:C.surface, border:`1px solid ${C.border}`, borderRadius:7, padding:"5px 8px", color:C.text, fontSize:11, minWidth:0 }}/>
               <Btn variant="ghost" onClick={()=>fileRef.current.click()} style={{ padding:"5px 8px", fontSize:11, flexShrink:0 }}>📁</Btn>
@@ -2256,8 +2260,8 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
               <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleImg}/>
             </div>
             {r.image && <div style={{ display:"flex", gap:6, marginTop:5, alignItems:"center" }}>
-              {imgProxying ? <span style={{ fontSize:10, color:C.textMuted }}>⏳ Fetching…</span> : <img src={r.image} alt="" style={{ width:48, height:36, objectFit:"cover", borderRadius:5 }} onError={e=>e.target.style.display="none"}/>}
-              {imgProxyFailed && <span style={{ fontSize:10, color:C.red }}>⚠ Blocked — upload instead</span>}
+              <img src={r.image} alt="" style={{ width:48, height:36, objectFit:"cover", borderRadius:5 }} onLoad={()=>setImgFailed(false)} onError={()=>setImgFailed(true)}/>
+              {imgFailed && <span style={{ fontSize:10, color:C.red }}>⚠ Couldn't load — try another URL or upload</span>}
               {imgKb && <span style={{ fontSize:10, color:C.green }}>✓ {imgKb}KB</span>}
             </div>}
             {/* Thumbnail picker */}

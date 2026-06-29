@@ -432,6 +432,8 @@ exports.imageProxy = onRequest(
           "Accept-Language": "en-US,en;q=0.9",
         }
       };
+      // Send a Referer/Origin matching the image's own host so hotlink checks pass
+      options.headers["Referer"] = parsed.protocol + "//" + parsed.hostname + "/";
       var proxyReq = lib.request(options, function(proxyRes) {
         if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
           var next = proxyRes.headers.location;
@@ -440,8 +442,9 @@ exports.imageProxy = onRequest(
           fetchImage(next, redirectsLeft - 1);
           return;
         }
-        if (proxyRes.statusCode !== 200) { res.status(502).json({ error: "Upstream " + proxyRes.statusCode }); return; }
+        if (proxyRes.statusCode !== 200) { res.status(502).send("Upstream " + proxyRes.statusCode); return; }
         var contentType = proxyRes.headers["content-type"] || "image/jpeg";
+        var asJson = String(req.query.json || "") === "1";
         var chunks = [];
         var stream = proxyRes;
         var enc = (proxyRes.headers["content-encoding"] || "").toLowerCase();
@@ -450,12 +453,19 @@ exports.imageProxy = onRequest(
         stream.on("data", function(c) { chunks.push(c); });
         stream.on("end", function() {
           var buf = Buffer.concat(chunks);
-          var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
-          res.json({ dataUrl: b64 });
+          if (asJson) {
+            var b64 = "data:" + contentType.split(";")[0] + ";base64," + buf.toString("base64");
+            res.json({ dataUrl: b64 });
+          } else {
+            // Stream raw image bytes so an <img src> can point straight here
+            res.set("Content-Type", contentType.split(";")[0]);
+            res.set("Cache-Control", "public, max-age=86400");
+            res.status(200).send(buf);
+          }
         });
-        stream.on("error", function(e) { res.status(500).json({ error: e.message }); });
+        stream.on("error", function(e) { res.status(500).send(e.message); });
       });
-      proxyReq.on("error", function(e) { res.status(500).json({ error: e.message }); });
+      proxyReq.on("error", function(e) { res.status(500).send(e.message); });
       proxyReq.end();
     }
 
