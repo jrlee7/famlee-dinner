@@ -137,6 +137,7 @@ exports.krogerCheckSales = onRequest(
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     var ingredients = req.body.ingredients || [];
     var locationId = req.body.locationId;
+    console.log("krogerCheckSales request:", JSON.stringify({ ingredientCount: ingredients.length, locationId: locationId }));
 
     // First get a client token
     var creds = Buffer.from(KROGER_CLIENT_ID + ":" + KROGER_CLIENT_SECRET).toString("base64");
@@ -148,7 +149,8 @@ exports.krogerCheckSales = onRequest(
     .then(function(r) { return r.json(); })
     .then(function(tokenData) {
       var token = tokenData.access_token;
-      if (!token) throw new Error("No token");
+      console.log("krogerCheckSales token response:", JSON.stringify(tokenData).slice(0,200));
+      if (!token) throw new Error("No token: " + JSON.stringify(tokenData));
 
       // Search all ingredients in parallel
       return Promise.all(ingredients.map(function(ingredient) {
@@ -157,6 +159,7 @@ exports.krogerCheckSales = onRequest(
         return fetchUrl(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } })
           .then(function(r) { return r.json(); })
           .then(function(data) {
+            if (data.errors || data.error) console.log("krogerCheckSales product error for", ingredient, ":", JSON.stringify(data).slice(0,200));
             var products = (data.data || []);
             var saleProducts = products.filter(function(p) {
               var price = (p.items || [])[0]?.price;
@@ -195,11 +198,17 @@ exports.krogerCheckSales = onRequest(
             }
             return null;
           })
-          .catch(function() { return null; });
+          .catch(function(e) { console.log("krogerCheckSales fetch failed for", ingredient, ":", String(e)); return null; });
       })).then(function(results) { return results.filter(Boolean); });
     })
-    .then(function(results) { res.json({ results: results }); })
-    .catch(function(e) { res.status(500).json({ error: e.message }); });
+    .then(function(results) {
+      console.log("krogerCheckSales done:", results.length, "results");
+      res.json({ results: results });
+    })
+    .catch(function(e) {
+      console.error("krogerCheckSales error:", String(e));
+      res.status(500).json({ error: e.message });
+    });
   }
 );
 
