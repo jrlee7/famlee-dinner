@@ -456,7 +456,7 @@ export default function App() {
     }
 
     try {
-      const result = await callFn("krogerAddToCart", { items: cartItems, userToken });
+      const result = await (async () => { const r = await fetch(`${FN_EAST}/krogerAddToCart`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ items: cartItems, userToken }) }); return r.json(); })();
       console.log("Cart result:", JSON.stringify(result));
       if (result?.errors?.length > 0 && JSON.stringify(result.errors).toLowerCase().includes("unauthorized")) {
         setKrogerToken(null);
@@ -722,9 +722,11 @@ function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recen
           : <button onClick={()=>setShowAddCat(true)} style={{ background:C.surface, border:`1px dashed ${C.border}`, borderRadius:20, padding:"3px 11px", cursor:"pointer", fontSize:11, color:C.textMuted }}>+ Category</button>
         }
       </div>
-      <div style={{ display:"flex", gap:5, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center" }}>
         <span style={{ fontSize:10, color:C.textMuted, fontWeight:700, textTransform:"uppercase" }}>Tag:</span>
-        {["All",...customTags].map(t => <button key={t} onClick={()=>setTagF(t)} style={{ background:tagF===t?C.green:C.card, color:tagF===t?"#0C1810":C.textDim, border:`1px solid ${tagF===t?C.green:C.border}`, borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>{t}</button>)}
+        <select value={tagF} onChange={e=>setTagF(e.target.value)} style={{ background:C.card, color:tagF!=="All"?C.green:C.textDim, border:`1px solid ${tagF!=="All"?C.green:C.border}`, borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:600, cursor:"pointer", outline:"none" }}>
+          {["All",...customTags].map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
       {list.length === 0
         ? <div style={{ textAlign:"center", padding:"60px 0", color:C.textMuted }}><div style={{ fontSize:40 }}>🔍</div><div style={{ fontSize:15, fontWeight:600, color:C.textDim, marginTop:10 }}>No recipes match</div></div>
@@ -810,7 +812,7 @@ function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, on
           <span style={{ color:C.textDim, fontSize:11 }}>👥{r.servings}</span>
           <span style={{ marginLeft:"auto", color:C.green, fontSize:11, fontWeight:600 }}>~${bestK.toFixed(2)}</span>
         </div>
-        {(r.tags||[]).length > 0 && <div style={{ display:"flex", gap:3, flexWrap:"wrap", marginBottom:3 }}>{(r.tags||[]).map(t=><span key={t} style={{ background:C.greenSoft, color:C.green, borderRadius:20, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{t}</span>)}</div>}
+        {(r.tags||[]).length > 0 && <div style={{ display:"flex", gap:3, marginBottom:3, alignItems:"center" }}>{(r.tags||[]).slice(0,2).map(t=><span key={t} style={{ background:C.greenSoft, color:C.green, borderRadius:20, padding:"1px 6px", fontSize:9, fontWeight:600 }}>{t}</span>)}{(r.tags||[]).length > 2 && <span style={{ color:C.textMuted, fontSize:9 }}>+{(r.tags||[]).length-2}</span>}</div>}
         {r.videoUrl && <div style={{ fontSize:10, color:C.accent, marginTop:2 }}>📹 Video</div>}
         {r.macros?.calories > 0 && <div style={{ display:"flex", gap:6, paddingTop:4, borderTop:`1px solid ${C.border}` }}><span style={{ fontSize:10, color:C.accent, fontWeight:700 }}>🔥{r.macros.calories}</span><span style={{ fontSize:10, color:C.textMuted }}>P:{r.macros.protein}g</span><span style={{ fontSize:10, color:C.textMuted }}>C:{r.macros.carbs}g</span><span style={{ fontSize:10, color:C.textMuted }}>F:{r.macros.fat}g</span></div>}
         {(r.cookLog||[]).length > 0 && <div style={{ fontSize:10, color:C.textMuted, marginTop:3 }}>🍴 Last: {fmt((r.cookLog||[])[0].date)}</div>}
