@@ -711,8 +711,10 @@ function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recen
         <button onClick={()=>setFav(!fav)} style={{ background:fav?C.accentSoft:C.card, color:fav?C.accent:C.textDim, border:`1px solid ${fav?C.accentDim:C.border}`, borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>{fav?"★ Favs":"☆ All"}</button>
         <span style={{ fontSize:12, color:C.textMuted }}>{list.length} recipes</span>
       </div>
-      <div style={{ display:"flex", gap:5, marginBottom:8, flexWrap:"wrap", alignItems:"center" }}>
-        {allCats.map(c => <button key={c} onClick={()=>setCat(c)} style={{ background:cat===c?C.accent:C.card, color:cat===c?"#0C1810":C.textDim, border:`1px solid ${cat===c?C.accent:C.border}`, borderRadius:20, padding:"3px 11px", fontSize:11, fontWeight:600, cursor:"pointer" }}>{c}</button>)}
+      <div style={{ display:"flex", gap:8, marginBottom:8, alignItems:"center" }}>
+        <select value={cat} onChange={e=>setCat(e.target.value)} style={{ background:C.card, color:cat!=="All"?C.accent:C.textDim, border:`1px solid ${cat!=="All"?C.accent:C.border}`, borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:600, cursor:"pointer", outline:"none" }}>
+          {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         {showAddCat
           ? <div style={{ display:"flex", gap:4, alignItems:"center" }}>
               <input value={newCat} onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newCat.trim()){onAddCat(newCat.trim());setNewCat("");setShowAddCat(false);}}} placeholder="New category..." autoFocus style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:20, padding:"3px 11px", color:C.text, fontSize:11, width:130 }}/>
