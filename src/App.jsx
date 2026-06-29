@@ -563,7 +563,6 @@ export default function App() {
           ))}
         </div>
         <div style={{ display:"flex", gap:5, marginLeft:"auto", alignItems:"center", flexShrink:0 }}>
-          <Btn variant="primary" onClick={() => setModal({ type:"import" })} style={{ padding:"3px 9px", fontSize:11 }}>📋 Import</Btn>
           <div style={{ position:"relative" }}>
             <button onClick={() => setShowTheme(s=>!s)} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 7px", cursor:"pointer", fontSize:14 }}>{tk.emoji}</button>
             {showTheme && (
@@ -711,9 +710,12 @@ function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recen
         <button onClick={()=>setFav(!fav)} style={{ background:fav?C.accentSoft:C.card, color:fav?C.accent:C.textDim, border:`1px solid ${fav?C.accentDim:C.border}`, borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>{fav?"★ Favs":"☆ All"}</button>
         <span style={{ fontSize:12, color:C.textMuted }}>{list.length} recipes</span>
       </div>
-      <div style={{ display:"flex", gap:8, marginBottom:8, alignItems:"center" }}>
+      <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center", flexWrap:"wrap" }}>
         <select value={cat} onChange={e=>setCat(e.target.value)} style={{ background:C.card, color:cat!=="All"?C.accent:C.textDim, border:`1px solid ${cat!=="All"?C.accent:C.border}`, borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:600, cursor:"pointer", outline:"none" }}>
           {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={tagF} onChange={e=>setTagF(e.target.value)} style={{ background:C.card, color:tagF!=="All"?C.green:C.textDim, border:`1px solid ${tagF!=="All"?C.green:C.border}`, borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:600, cursor:"pointer", outline:"none" }}>
+          {["All",...customTags].map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         {showAddCat
           ? <div style={{ display:"flex", gap:4, alignItems:"center" }}>
@@ -723,12 +725,6 @@ function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recen
             </div>
           : <button onClick={()=>setShowAddCat(true)} style={{ background:C.surface, border:`1px dashed ${C.border}`, borderRadius:20, padding:"3px 11px", cursor:"pointer", fontSize:11, color:C.textMuted }}>+ Category</button>
         }
-      </div>
-      <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center" }}>
-        <span style={{ fontSize:10, color:C.textMuted, fontWeight:700, textTransform:"uppercase" }}>Tag:</span>
-        <select value={tagF} onChange={e=>setTagF(e.target.value)} style={{ background:C.card, color:tagF!=="All"?C.green:C.textDim, border:`1px solid ${tagF!=="All"?C.green:C.border}`, borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:600, cursor:"pointer", outline:"none" }}>
-          {["All",...customTags].map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
       </div>
       {list.length === 0
         ? <div style={{ textAlign:"center", padding:"60px 0", color:C.textMuted }}><div style={{ fontSize:40 }}>🔍</div><div style={{ fontSize:15, fontWeight:600, color:C.textDim, marginTop:10 }}>No recipes match</div></div>
