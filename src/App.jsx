@@ -132,6 +132,18 @@ const BLANK = () => ({
 const Spin = ({size=16}) => <span style={{display:"inline-block",width:size,height:size,border:"2px solid #0003",borderTopColor:C.accent,borderRadius:"50%",animation:"spin .7s linear infinite"}}/>;
 const Stars = ({n,onChange}) => <span>{[1,2,3,4,5].map(i=><span key={i} onClick={onChange?()=>onChange(i):undefined} style={{color:i<=n?C.accent:C.border,fontSize:14,cursor:onChange?"pointer":"default",userSelect:"none"}}>{i<=n?"★":"☆"}</span>)}</span>;
 
+function PhotoThumb({img, selected, onClick, accent, border, surface, textMuted}) {
+  const [status, setStatus] = useState("loading"); // loading | ok | err
+  return (
+    <div onClick={status==="err"?undefined:onClick} style={{ position:"relative", cursor:status==="err"?"default":"pointer", borderRadius:6, overflow:"hidden", border:`2px solid ${selected?accent:border}`, flexShrink:0, width:64, height:64, background:surface, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      {status==="loading" && <Spin size={18}/>}
+      {status==="err" && <span style={{fontSize:9,color:textMuted,textAlign:"center",padding:2}}>✕</span>}
+      <img src={img} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:status==="ok"?"block":"none" }} onLoad={()=>setStatus("ok")} onError={()=>setStatus("err")}/>
+      {selected && status==="ok" && <div style={{ position:"absolute", top:2, right:2, background:accent, borderRadius:"50%", width:14, height:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, color:"#0C1810", fontWeight:900 }}>✓</div>}
+    </div>
+  );
+}
+
 function Btn({children,onClick,variant="ghost",disabled=false,style={}}){
   const b={display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,border:"none",borderRadius:8,padding:"7px 14px",cursor:disabled?"not-allowed":"pointer",fontSize:13,fontWeight:600,userSelect:"none",opacity:disabled?.55:1,fontFamily:"inherit",transition:"opacity .15s",...style};
   const v={primary:{...b,background:C.accent,color:"#0C1810"},secondary:{...b,background:C.greenSoft,color:C.green,border:`1px solid ${C.greenDim}`},ghost:{...b,background:C.surface,color:C.textDim,border:`1px solid ${C.border}`},danger:{...b,background:C.redSoft,color:C.red,border:`1px solid ${C.red}44`}};
@@ -2270,10 +2282,7 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
                 <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>Choose photo ({foundPhotos.length})</div>
                 <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                   {foundPhotos.map((img,i) => (
-                    <div key={i} onClick={()=>set("image",img)} style={{ position:"relative", cursor:"pointer", borderRadius:6, overflow:"hidden", border:`2px solid ${r.image===img?C.accent:C.border}`, flexShrink:0 }}>
-                      <img src={img} alt="" style={{ width:64, height:64, objectFit:"cover", display:"block" }} onError={e=>e.target.parentNode.style.display="none"}/>
-                      {r.image===img && <div style={{ position:"absolute", top:2, right:2, background:C.accent, borderRadius:"50%", width:14, height:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, color:"#0C1810", fontWeight:900 }}>✓</div>}
-                    </div>
+                    <PhotoThumb key={i} img={img} selected={r.image===img} onClick={()=>set("image",img)} accent={C.accent} border={C.border} surface={C.surface} textMuted={C.textMuted}/>
                   ))}
                   <div onClick={()=>set("image","")} style={{ width:64, height:64, border:`2px solid ${!r.image?C.accent:C.border}`, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0, background:C.surface }}>
                     <span style={{ fontSize:9, color:!r.image?C.accent:C.textMuted, textAlign:"center" }}>No photo</span>
