@@ -61,7 +61,7 @@ function setCors(res) {
 }
 
 exports.krogerToken = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -81,7 +81,7 @@ exports.krogerToken = onRequest(
 );
 
 exports.krogerSearch = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -118,7 +118,7 @@ exports.krogerSearch = onRequest(
 
 // Check sale prices for a list of ingredient names
 exports.krogerCheckSales = onRequest(
-  { cors: true, region: "us-central1", timeoutSeconds: 60 },
+  { cors: true, region: "us-central1", timeoutSeconds: 60, secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -198,7 +198,7 @@ exports.krogerCheckSales = onRequest(
 );
 
 exports.krogerOAuthExchange = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -222,7 +222,7 @@ exports.krogerOAuthExchange = onRequest(
 );
 
 exports.krogerRefresh = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -239,7 +239,7 @@ exports.krogerRefresh = onRequest(
 );
 
 exports.krogerAddToCart = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
@@ -265,7 +265,7 @@ exports.krogerAddToCart = onRequest(
 );
 
 exports.krogerLocations = onRequest(
-  { cors: true, region: "us-central1" },
+  { cors: true, region: "us-central1", secrets: ["KROGER_CLIENT_ID", "KROGER_CLIENT_SECRET"] },
   function(req, res) {
     setCors(res);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
