@@ -526,6 +526,7 @@ export default function App() {
     { id:"sales",     icon:"🏷",  label:"Meat Sales"   },
     { id:"book",      icon:"📖",  label:"Recipe Book"  },
     { id:"pantry",    icon:"🥫",  label:"Pantry"       },
+    { id:"freezer",   icon:"❄️",  label:"Freezer"      },
     { id:"macros",    icon:"📊",  label:"Macros"       },
   ];
 
@@ -606,12 +607,13 @@ export default function App() {
       <div style={{ flex:1, overflowY:"auto" }}>
         <div style={{ maxWidth:1300, margin:"0 auto", padding:"18px 18px" }}>
           {dbError && <div style={{ background:"#ff000022", border:"1px solid #ff4444", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:13, color:"#ff4444" }}>⚠️ Database error: {dbError}</div>}
-          {tab==="recipes"  && <RecipesTab recipes={recipes} mealPlan={mealPlan} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddCat={c=>updateCats([...(settings.cats||[]),c])} recentIds={recentIds} onView={r=>setModal({type:"detail",data:r})} onEdit={r=>setModal({type:"edit",data:r})} onDup={dupRecipe} onDelete={deleteRecipe} onToggleFav={toggleFav} onToggleBook={toggleBook} onSetMeal={setMeal} setModal={setModal} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])}/>}
+          {tab==="recipes"  && <RecipesTab recipes={recipes} mealPlan={mealPlan} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddCat={c=>updateCats([...(settings.cats||[]),c])} recentIds={recentIds} onView={r=>setModal({type:"detail",data:r})} onEdit={r=>setModal({type:"edit",data:r})} onDup={dupRecipe} onDelete={deleteRecipe} onToggleFav={toggleFav} onToggleBook={toggleBook} onSetMeal={setMeal} setModal={setModal} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])} freezer={freezer} onAddToFreezer={addToFreezer}/>}
           {tab==="mealplan" && <MealPlanTab recipes={recipes} mealPlan={mealPlan} onSet={setMeal} onClear={clearMeal} onClearAll={clearAllMP} onBuild={buildShopping} customTags={settings.tags||DTAGS} recentIds={recentIds} setModal={setModal} freezer={freezer} onUseFreezerMeal={useFreezerMeal} onRemoveFreezer={removeFreezerItem}/>}
           {tab==="shopping" && <ShoppingTab shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}} pantry={pantry} krogerToken={krogerToken} onSendToKroger={sendToKrogerCart} onKrogerConnect={() => window.location.href = getKrogerAuthUrl()} krogerLoading={krogerLoading} locationId={locationId} onFindStore={findKrogerStore}/>}
           {tab==="sales"    && <MeatSalesTab locationId={locationId} recipes={recipes} onSetMeal={setMeal} onFindStore={findKrogerStore} shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}}/>}
           {tab==="book"     && <BookTab recipes={bookRecipes} onRemove={toggleBook} onView={r=>setModal({type:"detail",data:r})}/>}
           {tab==="pantry"   && <PantryTab pantry={pantry} setPantry={updatePantry} recipes={recipes}/>}
+          {tab==="freezer"  && <FreezerTab freezer={freezer} recipes={recipes} onAddToFreezer={addToFreezer} onUseFreezerMeal={useFreezerMeal} onRemoveFreezer={removeFreezerItem}/>}
           {tab==="macros"   && <MacrosTab profile={profile} onSaveProfile={saveProfile} macroLog={macroLog} todayTotals={todayTotals} addMacroEntry={addMacroEntry} removeMacroEntry={removeMacroEntry} recipes={recipes} authUser={authUser}/>}
         </div>
       </div>
@@ -685,7 +687,7 @@ function MacroBanner({ totals, profile, onGoTo }) {
 // These import from separate files in src/components/ for real deployment.
 // For now they're defined inline below to keep the project self-contained.
 
-function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recentIds, onView, onEdit, onDup, onDelete, onToggleFav, onToggleBook, onSetMeal, setModal, onAddTag }) {
+function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recentIds, onView, onEdit, onDup, onDelete, onToggleFav, onToggleBook, onSetMeal, setModal, onAddTag, freezer=[], onAddToFreezer }) {
   const [cat, setCat] = useState("All");
   const [q, setQ] = useState("");
   const [fav, setFav] = useState(false);
@@ -749,17 +751,19 @@ function RecipesTab({ recipes, mealPlan, customTags, customCats, onAddCat, recen
       {list.length === 0
         ? <div style={{ textAlign:"center", padding:"60px 0", color:C.textMuted }}><div style={{ fontSize:40 }}>🔍</div><div style={{ fontSize:15, fontWeight:600, color:C.textDim, marginTop:10 }}>No recipes match</div></div>
         : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14 }}>
-            {list.map(r => <RecipeCard key={r.id} recipe={r} inPlan={Object.values(mealPlan).some(v=>v?.id===r.id)} recentlyCookd={recentIds.includes(r.id)} onView={onView} onEdit={onEdit} onDup={onDup} onDelete={onDelete} onToggleFav={onToggleFav} onToggleBook={onToggleBook} onSetMeal={onSetMeal} mealPlan={mealPlan}/>)}
+            {list.map(r => <RecipeCard key={r.id} recipe={r} inPlan={Object.values(mealPlan).some(v=>v?.id===r.id)} recentlyCookd={recentIds.includes(r.id)} onView={onView} onEdit={onEdit} onDup={onDup} onDelete={onDelete} onToggleFav={onToggleFav} onToggleBook={onToggleBook} onSetMeal={onSetMeal} mealPlan={mealPlan} freezerEntry={freezer.find(f=>f.recipeId===r.id)} onAddToFreezer={onAddToFreezer}/>)}
           </div>
       }
     </div>
   );
 }
 
-function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, onDelete, onToggleFav, onToggleBook, onSetMeal, mealPlan }) {
+function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, onDelete, onToggleFav, onToggleBook, onSetMeal, mealPlan, freezerEntry, onAddToFreezer }) {
   const [menu, setMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({top:0,left:0});
   const [dayPick, setDayPick] = useState(false);
+  const [freezerPick, setFreezerPick] = useState(false);
+  const [freezerMeals, setFreezerMeals] = useState(1);
   const menuBtnRef = useRef();
   const hasSale = (r.ingredients||[]).some(i => i.onSale);
   const bestK   = rc(r, "kroger");
@@ -809,6 +813,7 @@ function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, on
                     ["📋 Duplicate", ()=>onDup(r)],
                     [r.inBook?"📖 In Book":"📖 Add to Book", ()=>onToggleBook(r)],
                     ["📅 Add to Plan", ()=>{setDayPick(true);setMenu(false);}],
+                    [freezerEntry?`❄️ Freezer (${freezerEntry.meals})`:"❄️ Add to Freezer", ()=>{setFreezerPick(true);setMenu(false);}],
                     ["🗑 Delete Recipe", ()=>{if(window.confirm(`Delete "${r.title}"?\n\nThis cannot be undone.`))onDelete(r.id);}],
                   ].map(([lbl,fn])=>(
                     <button key={lbl} onClick={e=>{e.stopPropagation();fn();setMenu(false);}} style={{ width:"100%", background:C.surface, border:"none", borderBottom:`1px solid ${C.border}`, color:lbl.includes("Delete")?C.red:C.text, padding:"13px 16px", textAlign:"left", cursor:"pointer", fontSize:14, fontWeight:lbl.includes("Delete")?700:400, display:"block" }}>{lbl}</button>
@@ -839,6 +844,21 @@ function RecipeCard({ recipe:r, inPlan, recentlyCookd, onView, onEdit, onDup, on
           <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, marginBottom:5 }}>ADD TO SLOT</div>
           {DAYS.map(day => <div key={day} style={{ display:"flex", gap:3, marginBottom:3, alignItems:"center" }}><span style={{ width:28, fontSize:10, color:C.textDim }}>{day.slice(0,3)}</span>{MEALS.map(meal=><button key={meal} onClick={()=>{onSetMeal(`${day}_${meal}`,r);setDayPick(false);}} style={{ flex:1, background:mealPlan[`${day}_${meal}`]?C.greenSoft:C.card, color:mealPlan[`${day}_${meal}`]?C.green:C.textDim, border:`1px solid ${C.border}`, borderRadius:4, padding:"2px 3px", fontSize:9, cursor:"pointer" }}>{meal.slice(0,3)}</button>)}</div>)}
           <Btn variant="ghost" onClick={()=>setDayPick(false)} style={{ width:"100%", justifyContent:"center", marginTop:4, fontSize:11, padding:"3px 0" }}>Cancel</Btn>
+        </div>
+      )}
+      {freezerPick && (
+        <div style={{ padding:"10px 12px", borderTop:`1px solid ${C.border}`, background:"#4FA8D811" }} onClick={e=>e.stopPropagation()}>
+          <div style={{ fontSize:9, color:"#4FA8D8", fontWeight:700, marginBottom:5 }}>❄️ FREEZER MEALS</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7 }}>
+            <button onClick={()=>setFreezerMeals(n=>Math.max(1,n-1))} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:22, height:22, cursor:"pointer", fontWeight:700, fontSize:14 }}>−</button>
+            <span style={{ fontWeight:700, color:"#4FA8D8", minWidth:20, textAlign:"center" }}>{freezerMeals}</span>
+            <button onClick={()=>setFreezerMeals(n=>n+1)} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:22, height:22, cursor:"pointer", fontWeight:700, fontSize:14 }}>+</button>
+            <span style={{ fontSize:10, color:C.textDim }}>meal{freezerMeals>1?"s":""} in freezer</span>
+          </div>
+          <div style={{ display:"flex", gap:4 }}>
+            <Btn variant="primary" onClick={()=>{onAddToFreezer(r.id,r.title,freezerMeals);setFreezerPick(false);setFreezerMeals(1);}} style={{ flex:1, justifyContent:"center", fontSize:11 }}>✅ Save</Btn>
+            <Btn variant="ghost" onClick={()=>setFreezerPick(false)} style={{ flex:1, justifyContent:"center", fontSize:11 }}>Cancel</Btn>
+          </div>
         </div>
       )}
     </div>
@@ -1398,6 +1418,65 @@ function ShoppingTab({ shopping, setShopping, pantry, krogerToken, onSendToKroge
   );
 }
 
+
+// --- FREEZER TAB --------------------------------------------------------------
+function FreezerTab({ freezer, recipes, onAddToFreezer, onUseFreezerMeal, onRemoveFreezer }) {
+  const [adjustId, setAdjustId] = useState(null);
+  const [adjustQty, setAdjustQty] = useState(1);
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+        <span style={{ fontFamily:FD, fontSize:22, fontWeight:700, flex:1 }}>❄️ Freezer Stock</span>
+        <span style={{ fontSize:12, color:C.textDim }}>{freezer.reduce((s,f)=>s+f.meals,0)} total meals</span>
+      </div>
+      {freezer.length === 0 && (
+        <div style={{ textAlign:"center", padding:"60px 20px", color:C.textMuted }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>❄️</div>
+          <div style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>Freezer empty</div>
+          <div style={{ fontSize:13 }}>Open a recipe and tap "❄️ Add to Freezer" to track frozen meals.</div>
+        </div>
+      )}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {freezer.map(f => {
+          const recipe = recipes.find(r => r.id === f.recipeId);
+          const isAdjusting = adjustId === f.recipeId;
+          return (
+            <div key={f.recipeId} style={{ background:C.card, border:"1px solid #4FA8D844", borderRadius:12, padding:"14px 16px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                {recipe?.image && <img src={recipe.image} alt={recipe.title} style={{ width:52, height:52, borderRadius:8, objectFit:"cover" }} onError={e=>e.target.style.display="none"}/>}
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:2 }}>{f.title}</div>
+                  <div style={{ fontSize:11, color:C.textDim }}>Added {new Date(f.addedAt).toLocaleDateString()}</div>
+                  {recipe && <div style={{ fontSize:11, color:C.textMuted }}>{recipe.category} · ⏱{recipe.prepTime+recipe.cookTime}m</div>}
+                </div>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontFamily:FD, fontSize:32, fontWeight:700, color:"#4FA8D8", lineHeight:1 }}>{f.meals}</div>
+                  <div style={{ fontSize:10, color:"#4FA8D8", fontWeight:600 }}>meal{f.meals!==1?"s":""}</div>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:7, marginTop:12, flexWrap:"wrap" }}>
+                <Btn variant="ghost" onClick={()=>{setAdjustId(isAdjusting?null:f.recipeId);setAdjustQty(1);}} style={{ padding:"4px 10px", fontSize:11, border:"1px solid #4FA8D844", color:"#4FA8D8" }}>✏️ Adjust</Btn>
+                <Btn variant="ghost" onClick={()=>onUseFreezerMeal(f.recipeId)} style={{ padding:"4px 10px", fontSize:11 }}>− Use 1</Btn>
+                <Btn variant="danger" onClick={()=>onRemoveFreezer(f.recipeId)} style={{ padding:"4px 10px", fontSize:11 }}>🗑 Remove</Btn>
+              </div>
+              {isAdjusting && (
+                <div style={{ marginTop:10, padding:"10px 12px", background:C.surface, borderRadius:8, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:12, color:C.textDim }}>Set count:</span>
+                  <button onClick={()=>setAdjustQty(n=>Math.max(0,n-1))} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:24, height:24, cursor:"pointer", fontWeight:700 }}>−</button>
+                  <span style={{ fontWeight:700, color:"#4FA8D8", minWidth:24, textAlign:"center", fontSize:16 }}>{adjustQty}</span>
+                  <button onClick={()=>setAdjustQty(n=>n+1)} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:5, width:24, height:24, cursor:"pointer", fontWeight:700 }}>+</button>
+                  <Btn variant="primary" onClick={()=>{const delta=adjustQty-f.meals;if(delta>0)onAddToFreezer(f.recipeId,f.title,delta);else if(delta<0){const u=f.meals-adjustQty;for(let i=0;i<u;i++)onUseFreezerMeal(f.recipeId);}setAdjustId(null);}} style={{ padding:"4px 12px", fontSize:11 }}>✅ Save</Btn>
+                  <Btn variant="ghost" onClick={()=>setAdjustId(null)} style={{ padding:"4px 10px", fontSize:11 }}>Cancel</Btn>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // --- PANTRY TAB ---------------------------------------------------------------
 function PantryTab({ pantry, setPantry, recipes }) {
