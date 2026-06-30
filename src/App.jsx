@@ -879,8 +879,12 @@ function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, c
   const [saleDescModal, setSaleDescModal] = useState(null);
   const [krogerSales,   setKrogerSales]   = useState(null); // null=not checked, []=checked
   const [checkingSales, setCheckingSales] = useState(false);
+  const [ingredientSearch, setIngredientSearch] = useState("");
 
   const eligible = recipes.filter(r => (r.rating||0) >= minStar);
+  const ingredientMatches = ingredientSearch.trim()
+    ? eligible.filter(r => (r.ingredients||[]).some(i => i.name.toLowerCase().includes(ingredientSearch.trim().toLowerCase())))
+    : eligible;
   const planned  = Object.values(mealPlan).filter(Boolean);
 
   // Get unique meat/protein ingredient names from all recipes
@@ -1110,9 +1114,11 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
               </div>
             </div>
           )}
-          <div style={{ fontSize:10, color:C.textMuted, fontWeight:700, marginBottom:7, textTransform:"uppercase" }}>Drag onto calendar</div>
+          <div style={{ fontSize:10, color:C.textMuted, fontWeight:700, marginBottom:7, textTransform:"uppercase" }}>Search by ingredient · drag results onto calendar</div>
+          <input value={ingredientSearch} onChange={e=>setIngredientSearch(e.target.value)} placeholder="e.g. cabbage — find recipes that use it up"
+            style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:9, padding:"8px 12px", color:C.text, fontSize:13, marginBottom:10 }}/>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {eligible.map(r => {
+            {ingredientMatches.map(r => {
               const hs = (r.ingredients||[]).some(i=>i.onSale);
               const hp = priorityTag!=="None" && (r.tags||[]).includes(priorityTag);
               return (
@@ -1122,6 +1128,7 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
                 </div>
               );
             })}
+            {ingredientSearch.trim() && ingredientMatches.length===0 && <div style={{ fontSize:12, color:C.textMuted, fontStyle:"italic" }}>No recipes found with "{ingredientSearch}".</div>}
           </div>
         </>
       )}
