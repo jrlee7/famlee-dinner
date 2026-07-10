@@ -14,6 +14,7 @@ import {
   saveFreezer, subscribeFreezer,
   uploadRecipePhoto,
 } from "./firebase.js";
+import { SUGGESTED_RECIPES } from "./suggestedRecipes.js";
 
 // Direct Anthropic API call
 const callAI = async (system, user, tokens = 1400) => {
@@ -527,6 +528,7 @@ export default function App() {
     { id:"book",      icon:"📖",  label:"Recipe Book"  },
     { id:"pantry",    icon:"🥫",  label:"Pantry"       },
     { id:"freezer",   icon:"❄️",  label:"Freezer"      },
+    { id:"suggested", icon:"✨",  label:"Suggested"    },
     { id:"macros",    icon:"📊",  label:"Macros"       },
   ];
 
@@ -614,6 +616,7 @@ export default function App() {
           {tab==="book"     && <BookTab recipes={bookRecipes} onRemove={toggleBook} onView={r=>setModal({type:"detail",data:r})}/>}
           {tab==="pantry"   && <PantryTab pantry={pantry} setPantry={updatePantry} recipes={recipes}/>}
           {tab==="freezer"  && <FreezerTab freezer={freezer} recipes={recipes} onAddToFreezer={addToFreezer} onUseFreezerMeal={useFreezerMeal} onRemoveFreezer={removeFreezerItem}/>}
+          {tab==="suggested"&& <SuggestedTab recipes={recipes} onSave={addRecipe} onView={r=>setModal({type:"detail",data:r})}/>}
           {tab==="macros"   && <MacrosTab profile={profile} onSaveProfile={saveProfile} macroLog={macroLog} todayTotals={todayTotals} addMacroEntry={addMacroEntry} removeMacroEntry={removeMacroEntry} recipes={recipes} authUser={authUser}/>}
         </div>
       </div>
@@ -1477,6 +1480,106 @@ function FreezerTab({ freezer, recipes, onAddToFreezer, onUseFreezerMeal, onRemo
                   <Btn variant="ghost" onClick={()=>setAdjustId(null)} style={{ padding:"4px 10px", fontSize:11 }}>Cancel</Btn>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- SUGGESTED TAB ------------------------------------------------------------
+function SuggestedTab({ recipes, onSave, onView }) {
+  const [filter, setFilter] = useState("All");
+  const [saving, setSaving] = useState({});   // id -> true while writing
+  const savedTitles = new Set((recipes || []).map(r => (r.title || "").toLowerCase().trim()));
+  const isSaved = r => savedTitles.has((r.title || "").toLowerCase().trim());
+
+  const list = SUGGESTED_RECIPES.filter(r => filter === "All" || r.mealType === filter);
+  const counts = {
+    All: SUGGESTED_RECIPES.length,
+    Breakfast: SUGGESTED_RECIPES.filter(r => r.mealType === "Breakfast").length,
+    Lunch: SUGGESTED_RECIPES.filter(r => r.mealType === "Lunch").length,
+    Dinner: SUGGESTED_RECIPES.filter(r => r.mealType === "Dinner").length,
+  };
+
+  async function saveOne(r) {
+    if (isSaved(r) || saving[r.id]) return;
+    setSaving(s => ({ ...s, [r.id]: true }));
+    try { await onSave({ ...r }); } catch {}
+    // leave the flag on; the recipes prop will update and flip it to "Saved"
+  }
+  async function saveAllVisible() {
+    for (const r of list) { if (!isSaved(r)) await saveOne(r); }
+  }
+
+  const unsavedVisible = list.filter(r => !isSaved(r)).length;
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10, marginBottom:6 }}>
+        <div>
+          <div style={{ fontFamily:FD, fontSize:24, color:C.accent, fontWeight:700 }}>✨ Suggested Recipes</div>
+          <div style={{ fontSize:12.5, color:C.textDim, marginTop:2 }}>
+            Healthy, high-protein, low-sugar picks that freeze well. Review and save the ones you like to your library.
+          </div>
+        </div>
+        {unsavedVisible > 0 && (
+          <Btn variant="primary" onClick={saveAllVisible}>💾 Save all {filter!=="All"?filter.toLowerCase():""} ({unsavedVisible})</Btn>
+        )}
+      </div>
+
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", margin:"14px 0 18px" }}>
+        {["All","Breakfast","Lunch","Dinner"].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{ background:filter===f?C.accent:C.surface, color:filter===f?"#0C1810":C.textDim, border:`1px solid ${filter===f?C.accent:C.border}`, borderRadius:20, padding:"5px 13px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            {f} <span style={{ opacity:.7 }}>({counts[f]})</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
+        {list.map(r => {
+          const saved = isSaved(r);
+          const busy = saving[r.id] && !saved;
+          const m = r.macros || {};
+          return (
+            <div key={r.id} style={{ background:C.card, border:`1px solid ${saved?C.green+"66":C.border}`, borderRadius:14, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+              <div onClick={() => onView(r)} style={{ position:"relative", height:150, background:C.surface, cursor:"pointer" }}>
+                <img src={r.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e => { e.target.style.display="none"; }} />
+                <div style={{ position:"absolute", top:8, left:8, background:"rgba(0,0,0,.6)", color:"#fff", borderRadius:20, padding:"2px 9px", fontSize:10.5, fontWeight:700 }}>{r.mealType}</div>
+                {saved && <div style={{ position:"absolute", top:8, right:8, background:C.green, color:"#fff", borderRadius:20, padding:"2px 9px", fontSize:10.5, fontWeight:700 }}>✓ In library</div>}
+              </div>
+
+              <div style={{ padding:"11px 13px 13px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
+                <div style={{ fontWeight:700, fontSize:14.5, lineHeight:1.25, color:C.text }}>{r.title}</div>
+
+                <div style={{ display:"flex", gap:5, flexWrap:"wrap", fontSize:10.5, color:C.textMuted }}>
+                  <span>⏱ {r.prepTime + r.cookTime} min</span><span>·</span>
+                  <span>🍽 {r.servings} servings</span><span>·</span>
+                  <span>{r.category}</span>
+                </div>
+
+                <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                  {[["Cal", m.calories], ["P", m.protein+"g"], ["C", m.carbs+"g"], ["F", m.fat+"g"], ["Sugar", m.sugar+"g"]].map(([k,v]) => (
+                    <span key={k} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"2px 7px", fontSize:10.5, color:C.textDim }}>
+                      <strong style={{ color:C.text }}>{v}</strong> {k}
+                    </span>
+                  ))}
+                </div>
+
+                <div style={{ fontSize:11, color:C.textDim, lineHeight:1.4, flex:1 }}>{r.notes}</div>
+
+                <div style={{ display:"flex", gap:6, fontSize:10.5, color:C.textMuted, alignItems:"center", flexWrap:"wrap" }}>
+                  🔗 <a href={r.sourceUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color:C.accent, textDecoration:"none", fontWeight:600 }}>{r.source}</a>
+                </div>
+
+                <div style={{ display:"flex", gap:7, marginTop:2 }}>
+                  <Btn onClick={() => onView(r)} style={{ flex:1, padding:"7px 10px", fontSize:12 }}>👁 View</Btn>
+                  {saved
+                    ? <Btn variant="secondary" disabled style={{ flex:1, padding:"7px 10px", fontSize:12 }}>✓ Saved</Btn>
+                    : <Btn variant="primary" disabled={busy} onClick={() => saveOne(r)} style={{ flex:1, padding:"7px 10px", fontSize:12 }}>{busy ? <Spin size={13}/> : "💾 Save"}</Btn>}
+                </div>
+              </div>
             </div>
           );
         })}
