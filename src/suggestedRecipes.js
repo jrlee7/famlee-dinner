@@ -543,3 +543,27 @@ export const SUGGESTED_RECIPES = [
     instructions: "1. Preheat oven to 425°F; line a baking sheet.\n2. Spread green beans, potatoes and sausage on the pan. Drizzle with oil and sprinkle seasonings; toss and spread in a single layer.\n3. Bake 20-25 min until potatoes are tender.",
   }),
 ];
+
+// --- Facet tags (for the Suggested tab filter bar) ---------------------------
+const _HIDDEN_VEGGIE = new Set(["sg-b1","sg-b2","sg-b3","sg-b4","sg-b5","sg-b8","sg-b10","sg-l4","sg-l9","sg-d3","sg-d6","sg-d8"]);
+const _ONE_PAN       = new Set(["sg-l1","sg-l3","sg-l5","sg-l7","sg-l8","sg-l10","sg-d1","sg-d2","sg-d7","sg-d8","sg-d9","sg-d10"]);
+const _MUFFIN_CUP    = new Set(["sg-b1","sg-b2","sg-b3","sg-b4","sg-b6","sg-b8","sg-b10","sg-d3"]);
+const _SOUP_CHILI    = new Set(["sg-l1","sg-l7","sg-l8"]);
+
+// All available facet labels, in display order.
+export const SG_FACETS = ["Hidden Veggie","One-Pan / Dump","Muffins & Cups","Soup & Chili","30g+ Protein","≤30 Min"];
+
+for (const r of SUGGESTED_RECIPES) {
+  const f = [];
+  if (_HIDDEN_VEGGIE.has(r.id)) f.push("Hidden Veggie");
+  if (_ONE_PAN.has(r.id))       f.push("One-Pan / Dump");
+  if (_MUFFIN_CUP.has(r.id))    f.push("Muffins & Cups");
+  if (_SOUP_CHILI.has(r.id))    f.push("Soup & Chili");
+  if ((r.macros?.protein || 0) >= 30)        f.push("30g+ Protein");
+  if ((r.prepTime + r.cookTime) <= 30)       f.push("≤30 Min");
+  r.facets = f;
+  // Surface the descriptive facets as recipe tags too, so they carry into the
+  // library (deduped against whatever generic tags the recipe already has).
+  const extra = f.filter(x => x !== "30g+ Protein" && x !== "≤30 Min");
+  r.tags = [...new Set([...(r.tags || []), ...extra])];
+}

@@ -14,7 +14,7 @@ import {
   saveFreezer, subscribeFreezer,
   uploadRecipePhoto,
 } from "./firebase.js";
-import { SUGGESTED_RECIPES } from "./suggestedRecipes.js";
+import { SUGGESTED_RECIPES, SG_FACETS } from "./suggestedRecipes.js";
 
 // Direct Anthropic API call
 const callAI = async (system, user, tokens = 1400) => {
@@ -1491,17 +1491,23 @@ function FreezerTab({ freezer, recipes, onAddToFreezer, onUseFreezerMeal, onRemo
 // --- SUGGESTED TAB ------------------------------------------------------------
 function SuggestedTab({ recipes, onSave, onView }) {
   const [filter, setFilter] = useState("All");
+  const [facets, setFacets] = useState([]);   // active facet tags (AND logic)
   const [saving, setSaving] = useState({});   // id -> true while writing
   const savedTitles = new Set((recipes || []).map(r => (r.title || "").toLowerCase().trim()));
   const isSaved = r => savedTitles.has((r.title || "").toLowerCase().trim());
 
-  const list = SUGGESTED_RECIPES.filter(r => filter === "All" || r.mealType === filter);
+  const toggleFacet = f => setFacets(a => a.includes(f) ? a.filter(x => x !== f) : [...a, f]);
+  const matchesFacets = r => facets.every(f => (r.facets || []).includes(f));
+
+  const list = SUGGESTED_RECIPES.filter(r => (filter === "All" || r.mealType === filter) && matchesFacets(r));
   const counts = {
     All: SUGGESTED_RECIPES.length,
     Breakfast: SUGGESTED_RECIPES.filter(r => r.mealType === "Breakfast").length,
     Lunch: SUGGESTED_RECIPES.filter(r => r.mealType === "Lunch").length,
     Dinner: SUGGESTED_RECIPES.filter(r => r.mealType === "Dinner").length,
   };
+  // Per-facet count within the current meal-type filter.
+  const facetCount = f => SUGGESTED_RECIPES.filter(r => (filter === "All" || r.mealType === filter) && (r.facets || []).includes(f)).length;
 
   async function saveOne(r) {
     if (isSaved(r) || saving[r.id]) return;
@@ -1537,6 +1543,26 @@ function SuggestedTab({ recipes, onSave, onView }) {
         ))}
       </div>
 
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", margin:"0 0 18px" }}>
+        <span style={{ fontSize:10.5, color:C.textMuted, fontWeight:700, textTransform:"uppercase", letterSpacing:.6, marginRight:2 }}>Filter:</span>
+        {SG_FACETS.map(f => {
+          const on = facets.includes(f);
+          const n = facetCount(f);
+          return (
+            <button key={f} onClick={() => toggleFacet(f)} disabled={n===0 && !on} style={{ background:on?C.accentSoft:C.surface, color:on?C.accent:(n===0?C.textMuted:C.textDim), border:`1px solid ${on?C.accent:C.border}`, borderRadius:20, padding:"4px 11px", fontSize:11.5, fontWeight:on?700:500, cursor:n===0&&!on?"default":"pointer", opacity:n===0&&!on?.45:1 }}>
+              {on && "✓ "}{f} <span style={{ opacity:.7 }}>({n})</span>
+            </button>
+          );
+        })}
+        {facets.length > 0 && (
+          <button onClick={() => setFacets([])} style={{ background:"transparent", color:C.textMuted, border:"none", fontSize:11, cursor:"pointer", textDecoration:"underline", marginLeft:2 }}>clear</button>
+        )}
+      </div>
+
+      {list.length === 0 && (
+        <div style={{ textAlign:"center", color:C.textMuted, fontSize:13, padding:"40px 0" }}>No recipes match those filters. Try clearing a few.</div>
+      )}
+
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
         {list.map(r => {
           const saved = isSaved(r);
@@ -1558,6 +1584,14 @@ function SuggestedTab({ recipes, onSave, onView }) {
                   <span>🍽 {r.servings} servings</span><span>·</span>
                   <span>{r.category}</span>
                 </div>
+
+                {(r.facets || []).length > 0 && (
+                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                    {r.facets.map(f => (
+                      <span key={f} onClick={() => toggleFacet(f)} style={{ background:facets.includes(f)?C.accent:C.accentSoft, color:facets.includes(f)?"#0C1810":C.accent, borderRadius:20, padding:"1px 8px", fontSize:10, fontWeight:600, cursor:"pointer" }}>{f}</span>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                   {[["Cal", m.calories], ["P", m.protein+"g"], ["C", m.carbs+"g"], ["F", m.fat+"g"], ["Sugar", m.sugar+"g"]].map(([k,v]) => (
