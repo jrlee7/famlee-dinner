@@ -1493,21 +1493,31 @@ function SuggestedTab({ recipes, onSave, onView }) {
   const [filter, setFilter] = useState("All");
   const [facets, setFacets] = useState([]);   // active facet tags (AND logic)
   const [saving, setSaving] = useState({});   // id -> true while writing
+  const [dismissed, setDismissed] = useState(() => { try { return JSON.parse(localStorage.getItem("fl_sg_dismissed") || "[]"); } catch { return []; } });
+  const [showDismissed, setShowDismissed] = useState(false);
+  useEffect(() => { localStorage.setItem("fl_sg_dismissed", JSON.stringify(dismissed)); }, [dismissed]);
+
   const savedTitles = new Set((recipes || []).map(r => (r.title || "").toLowerCase().trim()));
   const isSaved = r => savedTitles.has((r.title || "").toLowerCase().trim());
+  const isDismissed = r => dismissed.includes(r.id);
+  const dismiss   = id => setDismissed(a => a.includes(id) ? a : [...a, id]);
+  const restore   = id => setDismissed(a => a.filter(x => x !== id));
+  const restoreAll = () => setDismissed([]);
 
   const toggleFacet = f => setFacets(a => a.includes(f) ? a.filter(x => x !== f) : [...a, f]);
   const matchesFacets = r => facets.every(f => (r.facets || []).includes(f));
 
-  const list = SUGGESTED_RECIPES.filter(r => (filter === "All" || r.mealType === filter) && matchesFacets(r));
+  const active = SUGGESTED_RECIPES.filter(r => !isDismissed(r));
+  const dismissedList = SUGGESTED_RECIPES.filter(r => isDismissed(r));
+  const list = active.filter(r => (filter === "All" || r.mealType === filter) && matchesFacets(r));
   const counts = {
-    All: SUGGESTED_RECIPES.length,
-    Breakfast: SUGGESTED_RECIPES.filter(r => r.mealType === "Breakfast").length,
-    Lunch: SUGGESTED_RECIPES.filter(r => r.mealType === "Lunch").length,
-    Dinner: SUGGESTED_RECIPES.filter(r => r.mealType === "Dinner").length,
+    All: active.length,
+    Breakfast: active.filter(r => r.mealType === "Breakfast").length,
+    Lunch: active.filter(r => r.mealType === "Lunch").length,
+    Dinner: active.filter(r => r.mealType === "Dinner").length,
   };
   // Per-facet count within the current meal-type filter.
-  const facetCount = f => SUGGESTED_RECIPES.filter(r => (filter === "All" || r.mealType === filter) && (r.facets || []).includes(f)).length;
+  const facetCount = f => active.filter(r => (filter === "All" || r.mealType === filter) && (r.facets || []).includes(f)).length;
 
   async function saveOne(r) {
     if (isSaved(r) || saving[r.id]) return;
@@ -1527,8 +1537,15 @@ function SuggestedTab({ recipes, onSave, onView }) {
         <div>
           <div style={{ fontFamily:FD, fontSize:24, color:C.accent, fontWeight:700 }}>✨ Suggested Recipes</div>
           <div style={{ fontSize:12.5, color:C.textDim, marginTop:2 }}>
-            Healthy, high-protein, low-sugar picks that freeze well. Review and save the ones you like to your library.
+            Healthy, high-protein, low-sugar picks that freeze well. Review and save the ones you like — or ✕ to remove the ones you don't.
           </div>
+          {dismissedList.length > 0 && (
+            <div style={{ fontSize:11.5, color:C.textMuted, marginTop:6, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+              <span>🗑 {dismissedList.length} removed</span>
+              <button onClick={() => setShowDismissed(s => !s)} style={{ background:"transparent", color:C.accent, border:"none", fontSize:11.5, cursor:"pointer", textDecoration:"underline", fontWeight:600 }}>{showDismissed ? "hide" : "review / restore"}</button>
+              <button onClick={restoreAll} style={{ background:"transparent", color:C.textMuted, border:"none", fontSize:11.5, cursor:"pointer", textDecoration:"underline" }}>restore all</button>
+            </div>
+          )}
         </div>
         {unsavedVisible > 0 && (
           <Btn variant="primary" onClick={saveAllVisible}>💾 Save all {filter!=="All"?filter.toLowerCase():""} ({unsavedVisible})</Btn>
@@ -1560,7 +1577,9 @@ function SuggestedTab({ recipes, onSave, onView }) {
       </div>
 
       {list.length === 0 && (
-        <div style={{ textAlign:"center", color:C.textMuted, fontSize:13, padding:"40px 0" }}>No recipes match those filters. Try clearing a few.</div>
+        <div style={{ textAlign:"center", color:C.textMuted, fontSize:13, padding:"40px 0" }}>
+          {active.length === 0 ? "All suggestions removed. Use “restore all” above to bring them back." : "No recipes match those filters. Try clearing a few."}
+        </div>
       )}
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
@@ -1573,7 +1592,8 @@ function SuggestedTab({ recipes, onSave, onView }) {
               <div onClick={() => onView(r)} style={{ position:"relative", height:150, background:C.surface, cursor:"pointer" }}>
                 <img src={r.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e => { e.target.style.display="none"; }} />
                 <div style={{ position:"absolute", top:8, left:8, background:"rgba(0,0,0,.6)", color:"#fff", borderRadius:20, padding:"2px 9px", fontSize:10.5, fontWeight:700 }}>{r.mealType}</div>
-                {saved && <div style={{ position:"absolute", top:8, right:8, background:C.green, color:"#fff", borderRadius:20, padding:"2px 9px", fontSize:10.5, fontWeight:700 }}>✓ In library</div>}
+                {saved && <div style={{ position:"absolute", bottom:8, left:8, background:C.green, color:"#fff", borderRadius:20, padding:"2px 9px", fontSize:10.5, fontWeight:700 }}>✓ In library</div>}
+                <button title="Remove from suggestions" onClick={e => { e.stopPropagation(); dismiss(r.id); }} style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,.6)", color:"#fff", border:"none", borderRadius:"50%", width:24, height:24, fontSize:13, lineHeight:1, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
               </div>
 
               <div style={{ padding:"11px 13px 13px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
@@ -1618,6 +1638,24 @@ function SuggestedTab({ recipes, onSave, onView }) {
           );
         })}
       </div>
+
+      {showDismissed && dismissedList.length > 0 && (
+        <div style={{ marginTop:26, borderTop:`1px solid ${C.border}`, paddingTop:18 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:C.textDim, marginBottom:12 }}>🗑 Removed ({dismissedList.length})</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:10 }}>
+            {dismissedList.map(r => (
+              <div key={r.id} style={{ display:"flex", alignItems:"center", gap:10, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:"8px 10px", opacity:.85 }}>
+                <img src={r.image} alt="" style={{ width:40, height:40, borderRadius:8, objectFit:"cover", flexShrink:0 }} onError={e => { e.target.style.visibility="hidden"; }} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:C.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.title}</div>
+                  <div style={{ fontSize:10, color:C.textMuted }}>{r.mealType}</div>
+                </div>
+                <button onClick={() => restore(r.id)} style={{ background:C.accentSoft, color:C.accent, border:"none", borderRadius:7, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0 }}>↩ Restore</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
