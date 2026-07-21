@@ -127,7 +127,7 @@ const BLANK = () => ({
   image:"", source:"manual", sourceUrl:"", videoUrl:"", notes:"", tags:[],
   ingredients:[{name:"",qty:1,unit:"",pK:0,pW:0,pA:0,pS:0,pC:0,onSale:false,saleDesc:"",aisle:"Other"}],
   instructions:"1. \n2. \n3. ",
-  macros:{calories:0,protein:0,carbs:0,fat:0,fiber:0,sugar:0,sodium:0},
+  macros:{},
   cookLog:[],
 });
 
@@ -2324,7 +2324,7 @@ function ImportModal({ onClose, onParsed, customTags, onAddTag }) {
             image: scrapedImgs[0] || "", source: "url", sourceUrl: url.trim(),
             videoUrl: "", notes: "Imported from link — add ingredients and steps manually.",
             tags: [], ingredients: [], instructions: "", cookLog: [],
-            macros: { calories:0, protein:0, carbs:0, fat:0, fiber:0, sugar:0, sodium:0 }
+            macros: {}
           };
           await searchPhotos(placeholder);
           onParsed(placeholder, scrapedImgs);
@@ -2549,12 +2549,12 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
       </div>
       <div style={{ maxHeight:"56vh", overflowY:"auto", paddingRight:2 }}>
         <div style={{ display:"flex", flexWrap:"wrap", gap:9 }}>
-          <FI label="Recipe Title" field="title"/>
-          <FI label="Category" field="category" half opts={[...CATS.slice(1), ...customCats]}/>
-          <FI label="Meal Type" field="mealType" half opts={["Breakfast","Lunch","Dinner","Side Dish","Snack","Dessert","Bread"]}/>
-          <FI label="Prep (min)" field="prepTime" half type="number"/>
-          <FI label="Cook (min)" field="cookTime" half type="number"/>
-          <FI label="Servings" field="servings" half type="number"/>
+          {FI({label:"Recipe Title", field:"title"})}
+          {FI({label:"Category", field:"category", half:true, opts:[...CATS.slice(1), ...customCats]})}
+          {FI({label:"Meal Type", field:"mealType", half:true, opts:["Breakfast","Lunch","Dinner","Side Dish","Snack","Dessert","Bread"]})}
+          {FI({label:"Prep (min)", field:"prepTime", half:true, type:"number"})}
+          {FI({label:"Cook (min)", field:"cookTime", half:true, type:"number"})}
+          {FI({label:"Servings", field:"servings", half:true, type:"number"})}
           <div style={{ flex:"0 0 calc(50% - 5px)", marginBottom:9 }}>
             <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", letterSpacing:.7, marginBottom:3 }}>Rating</div>
             <Stars n={r.rating} onChange={v=>set("rating",v)}/>
@@ -2654,12 +2654,12 @@ function ReviewModal({ recipe:init, onClose, onSave, isEdit=false, customTags=DT
           <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>Macros per serving <span style={{ fontWeight:400, textTransform:"none", fontSize:9 }}>(auto-calculated on import)</span></div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:6 }}>
             {[["calories","🔥 Cal","kcal"],["protein","💪 Protein","g"],["carbs","🌾 Carbs","g"],["fat","🫙 Fat","g"]].map(([k,lbl,u]) => (
-              <div key={k}><div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{lbl} ({u})</div><input type="number" value={r.macros?.[k]||0} onChange={e=>set("macros",{...(r.macros||{}),[k]:Number(e.target.value)})} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 7px", color:C.text, fontSize:12 }}/></div>
+              <div key={k}><div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{lbl} ({u})</div><input type="number" value={r.macros?.[k]??""} onChange={e=>set("macros",{...(r.macros||{}),[k]:e.target.value===""?"":Number(e.target.value)})} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 7px", color:C.text, fontSize:12 }}/></div>
             ))}
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:7 }}>
             {[["fiber","🥦 Fiber","g"],["sugar","🍬 Sugar","g"],["sodium","🧂 Sodium","mg"]].map(([k,lbl,u]) => (
-              <div key={k}><div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{lbl} ({u})</div><input type="number" value={r.macros?.[k]||0} onChange={e=>set("macros",{...(r.macros||{}),[k]:Number(e.target.value)})} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 7px", color:C.text, fontSize:12 }}/></div>
+              <div key={k}><div style={{ fontSize:9, color:C.textMuted, marginBottom:2 }}>{lbl} ({u})</div><input type="number" value={r.macros?.[k]??""} onChange={e=>set("macros",{...(r.macros||{}),[k]:e.target.value===""?"":Number(e.target.value)})} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 7px", color:C.text, fontSize:12 }}/></div>
             ))}
           </div>
         </div>
