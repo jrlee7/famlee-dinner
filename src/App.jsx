@@ -883,6 +883,11 @@ function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, c
   const [krogerSales,   setKrogerSales]   = useState(null); // null=not checked, []=checked
   const [checkingSales, setCheckingSales] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState("");
+  const [showMealPick,  setShowMealPick]  = useState(false);
+  const [planMeals,     setPlanMeals]     = useState(() => {
+    try { return JSON.parse(localStorage.getItem("fl_planmeals")) || ["Breakfast","Lunch","Dinner"]; }
+    catch { return ["Breakfast","Lunch","Dinner"]; }
+  });
 
   const eligible = recipes.filter(r => (r.rating||0) >= minStar);
   const ingredientMatches = ingredientSearch.trim()
@@ -922,28 +927,31 @@ function MealPlanTab({ recipes, mealPlan, onSet, onClear, onClearAll, onBuild, c
   const onSaleItems = (krogerSales||[]).filter(s => s.onSale);
   const notOnSaleItems = (krogerSales||[]).filter(s => !s.onSale);
 
-  async function aiPlan() {
-    if (!eligible.length) return;
+  async function aiPlan(meals = planMeals) {
+    if (!eligible.length || !meals.length) return;
+    setShowMealPick(false);
     setAiLoading(true);
     try {
       const list = eligible.map(r =>
         `${r.id}|${r.title}|${r.mealType||"Dinner"}|${r.category}|${r.rating||0}stars|${(r.ingredients||[]).some(i=>i.onSale)?"SALE":""}|${priorityTag!=="None"&&(r.tags||[]).includes(priorityTag)?"PRIORITY":""}|${recentIds.includes(r.id)?"RECENT":""}|${freezer.find(f=>f.recipeId===r.id)?"FREEZER":""}`
       ).join("\n");
 
-      const sys = `You are a meal planner. Assign recipes to a 7-day plan for Breakfast, Lunch, and Dinner slots.
+      const mealsLine = meals.join(", ");
+      const exampleKeys = meals.map(m => `"Monday_${m}":"id"`).join(",");
+      const sys = `You are a meal planner. Assign recipes to a 7-day plan. ONLY fill these meal slots: ${mealsLine}. Do NOT create slots for any other meal type.
 
 STRICT RULES:
 - A recipe with mealType "Breakfast" MUST only go in a Breakfast slot (Monday_Breakfast, Tuesday_Breakfast etc)
 - A recipe with mealType "Lunch" MUST only go in a Lunch slot
 - A recipe with mealType "Dinner" MUST only go in a Dinner slot
-- A recipe with mealType "Any" or blank can go in any slot
-- Snack, Dessert, Bread, Side Dish recipes should be skipped unless no other options exist
+- A recipe with mealType "Any" or blank can go in any of the requested slots
+- Only assign recipes whose mealType matches one of the requested slots (${mealsLine}), or "Any"/blank.
 - ${priorityTag!=="None"?`STRONGLY prefer PRIORITY tagged recipes. `:""}${saleFirst?"Prefer SALE recipes to save money. ":""}Avoid RECENT recipes if possible. Vary proteins and categories daily.
 - FREEZER recipes already have cooked meals stored in the freezer — prefer using them for some slots to use up freezer stock before cooking more.
 
 Return ONLY valid JSON with this exact format:
-{"Monday_Breakfast":"id","Monday_Lunch":"id","Monday_Dinner":"id","Tuesday_Breakfast":"id",...}
-Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rather than put the wrong mealType in it.`;
+{${exampleKeys},...}
+Use exact recipe IDs. Only use these meal slots: ${mealsLine}. Only include slots you have a recipe for. Skip a slot rather than put the wrong mealType in it.`;
 
       const raw = await callAI(sys, `Available recipes (id|title|mealType|category|rating|flags):\n${list}`, 1200);
       const plan = JSON.parse(raw.replace(/```json|```/g,"").trim());
@@ -951,6 +959,7 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
         const r = eligible.find(x => x.id === id);
         if (r) {
           const [d,m] = k.split("_");
+          if (!meals.includes(m)) continue;
           await onSet(`${d}_${m}`, r);
           if (freezer.find(f=>f.recipeId===r.id) && onUseFreezerMeal) await onUseFreezerMeal(r.id);
         }
@@ -1024,6 +1033,33 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
         )}
       </div>
 
+      {/* Meal-type picker before AI plan */}
+      {showMealPick && (
+        <Modal onClose={()=>setShowMealPick(false)} width={380}>
+          <div style={{ fontFamily:FD, fontSize:18, fontWeight:700, marginBottom:4 }}>✨ AI Meal Plan</div>
+          <div style={{ fontSize:12, color:C.textMuted, marginBottom:14 }}>Which meals should the plan fill?</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+            {["Breakfast","Lunch","Dinner"].map(m => {
+              const on = planMeals.includes(m);
+              return (
+                <button key={m} onClick={()=>{
+                  const next = on ? planMeals.filter(x=>x!==m) : [...planMeals, m];
+                  setPlanMeals(next);
+                  localStorage.setItem("fl_planmeals", JSON.stringify(next));
+                }} style={{ display:"flex", alignItems:"center", gap:10, background:on?C.greenSoft:C.surface, border:`1px solid ${on?C.green:C.border}`, borderRadius:9, padding:"10px 14px", cursor:"pointer", fontSize:14, color:on?C.green:C.textDim, fontWeight:on?700:400 }}>
+                  <span style={{ width:20, height:20, borderRadius:5, background:on?C.green:"transparent", border:`2px solid ${on?C.green:C.border}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#0C1810", flexShrink:0 }}>{on?"✓":""}</span>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn variant="ghost" onClick={()=>setShowMealPick(false)} style={{ flex:1, justifyContent:"center" }}>Cancel</Btn>
+            <Btn variant="primary" onClick={()=>aiPlan(planMeals)} disabled={!planMeals.length} style={{ flex:2, justifyContent:"center" }}>Build Plan</Btn>
+          </div>
+        </Modal>
+      )}
+
       {/* Sale description modal */}
       {saleDescModal && (
         <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,.5)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={()=>setSaleDescModal(null)}>
@@ -1040,7 +1076,7 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
         <div style={{ display:"flex", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
           {[["weekly","📅 Week"],["monthly","🗓 Month"]].map(([id,lbl]) => <button key={id} onClick={()=>setViewMode(id)} style={{ background:viewMode===id?C.accent:"transparent", color:viewMode===id?"#0C1810":C.textDim, border:"none", padding:"5px 12px", cursor:"pointer", fontSize:12, fontWeight:700 }}>{lbl}</button>)}
         </div>
-        <Btn variant="secondary" onClick={aiPlan} disabled={aiLoading||!eligible.length}>{aiLoading?<><Spin size={13}/> Planning…</>:"✨ AI Plan"}</Btn>
+        <Btn variant="secondary" onClick={()=>setShowMealPick(true)} disabled={aiLoading||!eligible.length}>{aiLoading?<><Spin size={13}/> Planning…</>:"✨ AI Plan"}</Btn>
         {planned.length > 0 && <Btn variant="primary" onClick={onBuild}>🛒 Build List</Btn>}
         {planned.length > 0 && <Btn variant="danger" onClick={onClearAll}>🗑 Clear</Btn>}
       </div>
@@ -1074,8 +1110,15 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
       {viewMode === "weekly" && (
         <>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:8, marginBottom:16 }}>
-            {DAYS.map(day => (
-              <div key={day} style={{ background:C.card, borderRadius:10, border:`1px solid ${C.border}`, overflow:"hidden" }}>
+            {DAYS.map(day => {
+              const dt = MEALS.reduce((a,meal) => {
+                const rc = mealPlan[`${day}_${meal}`];
+                const m = rc?.macros;
+                if (m) { a.cal+=Number(m.calories)||0; a.p+=Number(m.protein)||0; a.c+=Number(m.carbs)||0; a.f+=Number(m.fat)||0; }
+                return a;
+              }, {cal:0,p:0,c:0,f:0});
+              return (
+              <div key={day} style={{ background:C.card, borderRadius:10, border:`1px solid ${C.border}`, overflow:"hidden", display:"flex", flexDirection:"column" }}>
                 <div style={{ background:C.surface, padding:"5px 8px", fontSize:10, fontWeight:800, color:C.accent, borderBottom:`1px solid ${C.border}`, textTransform:"uppercase" }}>{day.slice(0,3)}</div>
                 {MEALS.map((meal,mi) => {
                   const key = `${day}_${meal}`;
@@ -1095,8 +1138,17 @@ Use exact recipe IDs. Only include slots you have a recipe for. Skip a slot rath
                     </div>
                   );
                 })}
+                <div style={{ marginTop:"auto", background:C.surface, borderTop:`1px solid ${C.border}`, padding:"5px 7px" }}>
+                  {dt.cal > 0 ? (
+                    <>
+                      <div style={{ fontSize:11, fontWeight:800, color:C.accent }}>{Math.round(dt.cal)} <span style={{ fontSize:8, color:C.textMuted, fontWeight:600 }}>kcal</span></div>
+                      <div style={{ fontSize:8, color:C.textMuted, fontWeight:600, marginTop:1 }}>P{Math.round(dt.p)} · C{Math.round(dt.c)} · F{Math.round(dt.f)}</div>
+                    </>
+                  ) : <div style={{ fontSize:8, color:C.border }}>— no macros —</div>}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           {freezer.length > 0 && (
             <div style={{ marginBottom:16 }}>
