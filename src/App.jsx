@@ -210,7 +210,7 @@ export default function App() {
   const [macroLog,   setMacroLog]   = useState([]);
 
   // UI state
-  const [tab,        setTab]        = useState("recipes");
+  const [tab,        setTab]        = useState("today");
   const [modal,      setModal]      = useState(null);
   const [showTheme,  setShowTheme]  = useState(false);
 
@@ -521,6 +521,7 @@ export default function App() {
 
   // -- Tabs --------------------------------------------------------------------
   const TABS = [
+    { id:"today",     icon:"🌞",  label:"Today"        },
     { id:"recipes",   icon:"🍽",  label:"Recipes"      },
     { id:"mealplan",  icon:"📅",  label:"Meal Plan"    },
     { id:"shopping",  icon:"🛒",  label:"Shopping"     },
@@ -609,6 +610,7 @@ export default function App() {
       <div style={{ flex:1, overflowY:"auto" }}>
         <div style={{ maxWidth:1300, margin:"0 auto", padding:"18px 18px" }}>
           {dbError && <div style={{ background:"#ff000022", border:"1px solid #ff4444", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:13, color:"#ff4444" }}>⚠️ Database error: {dbError}</div>}
+          {tab==="today"    && <TodayTab mealPlan={mealPlan} todayTotals={todayTotals} profile={profile} macroLog={macroLog} onView={r=>setModal({type:"detail",data:r})} onLog={addMacroEntry} goPlan={()=>setTab("mealplan")} goMacros={()=>setTab("macros")}/>}
           {tab==="recipes"  && <RecipesTab recipes={recipes} mealPlan={mealPlan} customTags={settings.tags||DTAGS} customCats={settings.cats||[]} onAddCat={c=>updateCats([...(settings.cats||[]),c])} recentIds={recentIds} onView={r=>setModal({type:"detail",data:r})} onEdit={r=>setModal({type:"edit",data:r})} onDup={dupRecipe} onDelete={deleteRecipe} onToggleFav={toggleFav} onToggleBook={toggleBook} onSetMeal={setMeal} setModal={setModal} onAddTag={t=>updateTags([...(settings.tags||DTAGS),t])} freezer={freezer} onAddToFreezer={addToFreezer}/>}
           {tab==="mealplan" && <MealPlanTab recipes={recipes} mealPlan={mealPlan} onSet={setMeal} onClear={clearMeal} onClearAll={clearAllMP} onBuild={buildShopping} customTags={settings.tags||DTAGS} recentIds={recentIds} setModal={setModal} freezer={freezer} onUseFreezerMeal={useFreezerMeal} onRemoveFreezer={removeFreezerItem}/>}
           {tab==="shopping" && <ShoppingTab shopping={shopping} setShopping={s=>{setShopping(s);saveShoppingList(familyId,s);}} pantry={pantry} krogerToken={krogerToken} onSendToKroger={sendToKrogerCart} onKrogerConnect={() => window.location.href = getKrogerAuthUrl()} krogerLoading={krogerLoading} locationId={locationId} onFindStore={findKrogerStore}/>}
@@ -682,6 +684,112 @@ function MacroBanner({ totals, profile, onGoTo }) {
         );
       })}
       <button onClick={onGoTo} style={{ background:C.accentSoft, color:C.accent, border:`1px solid ${C.accent}44`, borderRadius:8, padding:"3px 10px", cursor:"pointer", fontSize:11, fontWeight:700, flexShrink:0 }}>📊 Log</button>
+    </div>
+  );
+}
+
+// --- TODAY TAB ----------------------------------------------------------------
+function TodayTab({ mealPlan, todayTotals, profile, macroLog, onView, onLog, goPlan, goMacros }) {
+  const now = new Date();
+  const todayName = now.toLocaleDateString("en-US", { weekday: "long" });
+  const dateLabel = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  // Today's planned meals (in MEALS order)
+  const planned = MEALS.map(meal => ({ meal, recipe: mealPlan[`${todayName}_${meal}`] })).filter(x => x.recipe);
+
+  // Expected = sum of planned recipe macros
+  const expected = planned.reduce((a, { recipe }) => {
+    const m = recipe.macros || {};
+    return { cal:a.cal+(Number(m.calories)||0), protein:a.protein+(Number(m.protein)||0), carbs:a.carbs+(Number(m.carbs)||0), fat:a.fat+(Number(m.fat)||0) };
+  }, { cal:0, protein:0, carbs:0, fat:0 });
+
+  const rows = [
+    { key:"cal",     label:"Calories", unit:"kcal", color:C.accent,  goal:Number(profile.goalCal)||0 },
+    { key:"protein", label:"Protein",  unit:"g",    color:"#4CAF62", goal:Number(profile.goalProtein)||0 },
+    { key:"carbs",   label:"Carbs",    unit:"g",    color:"#E8A838", goal:Number(profile.goalCarbs)||0 },
+    { key:"fat",     label:"Fat",      unit:"g",    color:"#D97B35", goal:Number(profile.goalFat)||0 },
+  ];
+
+  const logged = new Set(macroLog.map(e => e.label));
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+        <h2 style={{ fontFamily:FD, fontSize:22, color:C.text, margin:0 }}>🌞 {dateLabel}</h2>
+        <button onClick={goPlan} style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:12, fontWeight:700, padding:0 }}>Edit week →</button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:14, alignItems:"start" }}>
+
+        {/* Today's meals */}
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+          <div style={{ background:C.surface, padding:"8px 12px", fontSize:11, fontWeight:800, color:C.accent, textTransform:"uppercase", letterSpacing:.6, borderBottom:`1px solid ${C.border}` }}>Today's Meals</div>
+          {planned.length === 0 && (
+            <div style={{ padding:18, textAlign:"center" }}>
+              <div style={{ fontSize:13, color:C.textDim, marginBottom:8 }}>Nothing planned for {todayName}.</div>
+              <Btn variant="primary" onClick={goPlan}>📅 Plan meals</Btn>
+            </div>
+          )}
+          {planned.map(({ meal, recipe }, i) => {
+            const m = recipe.macros || {};
+            const hasM = Number(m.calories) > 0;
+            const isLogged = logged.has(recipe.title);
+            return (
+              <div key={meal} style={{ padding:"9px 12px", borderBottom:i<planned.length-1?`1px solid ${C.border}`:"none", display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ flex:1, minWidth:0, cursor:"pointer" }} onClick={()=>onView(recipe)}>
+                  <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase" }}>{meal}</div>
+                  <div style={{ fontSize:13, fontWeight:700, color:C.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{recipe.title}</div>
+                  {hasM && <div style={{ fontSize:10, color:C.textMuted, marginTop:1 }}>{Math.round(m.calories)}kcal · P{Math.round(m.protein||0)} · C{Math.round(m.carbs||0)} · F{Math.round(m.fat||0)}</div>}
+                </div>
+                {hasM && (isLogged
+                  ? <span style={{ fontSize:10, color:"#4CAF62", fontWeight:700, flexShrink:0 }}>✓ Logged</span>
+                  : <button onClick={()=>onLog({ label:recipe.title, cal:Math.round(Number(m.calories)||0), protein:Math.round(Number(m.protein)||0), carbs:Math.round(Number(m.carbs)||0), fat:Math.round(Number(m.fat)||0), servings:1, source:"mealplan" })}
+                      style={{ background:C.accentSoft, color:C.accent, border:`1px solid ${C.accent}44`, borderRadius:7, padding:"4px 9px", cursor:"pointer", fontSize:10, fontWeight:700, flexShrink:0 }}>+ Log</button>)}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Macros: current vs expected vs goal */}
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+          <div style={{ background:C.surface, padding:"8px 12px", fontSize:11, fontWeight:800, color:C.accent, textTransform:"uppercase", letterSpacing:.6, borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span>Macros</span>
+            <button onClick={goMacros} style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:10, fontWeight:700, padding:0, textTransform:"none" }}>Full log →</button>
+          </div>
+          <div style={{ padding:"10px 12px" }}>
+            {rows.map(r => {
+              const cur = Math.round(todayTotals[r.key]||0);
+              const exp = Math.round(expected[r.key]||0);
+              const max = Math.max(r.goal, exp, cur, 1);
+              const curPct = Math.min(100, (cur/max)*100);
+              const expPct = Math.min(100, (exp/max)*100);
+              const goalPct = Math.min(100, (r.goal/max)*100);
+              const over = r.goal > 0 && cur > r.goal;
+              return (
+                <div key={r.key} style={{ marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:3 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:r.color }}>{r.label}</span>
+                    <span style={{ fontSize:10, color:C.textMuted }}>
+                      <strong style={{ color:over?"#E53935":C.text, fontSize:12 }}>{cur}</strong>
+                      {exp>0 && <> / plan {exp}</>}{r.goal>0 && <> / goal {r.goal}</>} {r.unit}
+                    </span>
+                  </div>
+                  <div style={{ position:"relative", height:8, background:C.border, borderRadius:4 }}>
+                    {exp>0 && <div style={{ position:"absolute", height:"100%", width:expPct+"%", background:r.color+"33", borderRadius:4 }}/>}
+                    <div style={{ position:"absolute", height:"100%", width:curPct+"%", background:over?"#E53935":r.color, borderRadius:4, transition:"width .3s" }}/>
+                    {r.goal>0 && <div style={{ position:"absolute", left:`calc(${goalPct}% - 1px)`, top:-2, width:2, height:12, background:C.text, opacity:.6, borderRadius:1 }}/>}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ fontSize:9, color:C.textMuted, display:"flex", gap:12, marginTop:6 }}>
+              <span><span style={{ display:"inline-block", width:8, height:8, background:C.accent, borderRadius:2, marginRight:4 }}/>eaten</span>
+              <span><span style={{ display:"inline-block", width:8, height:8, background:C.accent+"33", borderRadius:2, marginRight:4 }}/>planned</span>
+              <span><span style={{ display:"inline-block", width:2, height:9, background:C.text, opacity:.6, marginRight:4, verticalAlign:"middle" }}/>goal</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
