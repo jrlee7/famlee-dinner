@@ -29,7 +29,17 @@ export const signOutUser = () => signOut(auth);
 
 export async function getFamilyId(uid) {
   const userDoc = await getDoc(doc(db, "users", uid));
-  if (userDoc.exists()) return userDoc.data().familyId;
+  if (userDoc.exists()) {
+    const familyId = userDoc.data().familyId;
+    // Backfill: older owner accounts may predate the /families doc — joiners
+    // need it to exist for the "family not found" check
+    if (familyId === uid) {
+      const famRef = doc(db, "families", familyId);
+      const famDoc = await getDoc(famRef);
+      if (!famDoc.exists()) await setDoc(famRef, { createdAt: new Date().toISOString(), ownerId: uid });
+    }
+    return familyId;
+  }
   // First login — create a new family
   const familyId = uid; // owner's uid is the family ID
   await setDoc(doc(db, "users", uid), { familyId, role: "owner", joinedAt: new Date().toISOString() });
