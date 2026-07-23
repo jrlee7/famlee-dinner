@@ -645,7 +645,7 @@ export default function App() {
               <div style={{ marginBottom:12 }}>
                 <input value={joinCode} onChange={e=>setJoinCode(e.target.value)} placeholder="Paste Family ID…" style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:7, padding:"7px 10px", color:C.text, fontSize:13, marginBottom:6 }}/>
                 {joinErr && <div style={{ fontSize:11, color:C.red, marginBottom:4 }}>{joinErr}</div>}
-                <Btn variant="primary" onClick={async()=>{ try{ await joinFamily(authUser.uid,joinCode); setFamilyId(joinCode); setShowJoin(false); setJoinErr(""); }catch(e){setJoinErr(e.message);}}} style={{ width:"100%", justifyContent:"center" }}>Join</Btn>
+                <Btn variant="primary" onClick={async()=>{ try{ await joinFamily(authUser.uid,joinCode.trim()); setFamilyId(joinCode.trim()); setShowJoin(false); setJoinErr(""); }catch(e){setJoinErr(e.message);}}} style={{ width:"100%", justifyContent:"center" }}>Join</Btn>
               </div>
             )}
             <Btn variant="secondary" onClick={()=>setModal({type:"tagManager"})} style={{ width:"100%", justifyContent:"center", marginBottom:8 }}>🏷 Manage Tags</Btn>

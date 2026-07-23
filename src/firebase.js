@@ -48,6 +48,7 @@ export async function getFamilyId(uid) {
 }
 
 export async function joinFamily(uid, familyId) {
+  familyId = familyId.trim();
   const familyDoc = await getDoc(doc(db, "families", familyId));
   if (!familyDoc.exists()) throw new Error("Family not found");
   await setDoc(doc(db, "users", uid), { familyId, role: "member", joinedAt: new Date().toISOString() });
